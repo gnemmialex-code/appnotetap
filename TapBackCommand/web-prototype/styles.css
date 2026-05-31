@@ -74,6 +74,55 @@ body {
   flex-direction: column;
 }
 
+/* Fond animé : halos gris qui dérivent (donne du mouvement, évite le statique) */
+.screen::before,
+.screen::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  width: 80%;
+  height: 55%;
+  border-radius: 50%;
+  filter: blur(64px);
+  pointer-events: none;
+  will-change: transform;
+}
+.screen::before {
+  top: 8%;
+  left: -15%;
+  background: radial-gradient(circle, rgba(255,255,255,0.11), transparent 70%);
+  animation: blobA 17s ease-in-out infinite alternate;
+}
+.screen::after {
+  bottom: 4%;
+  right: -15%;
+  background: radial-gradient(circle, rgba(255,255,255,0.08), transparent 70%);
+  animation: blobB 22s ease-in-out infinite alternate;
+}
+@keyframes blobA {
+  from { transform: translate(0, 0) scale(1); }
+  to   { transform: translate(34%, 26%) scale(1.35); }
+}
+@keyframes blobB {
+  from { transform: translate(0, 0) scale(1.15); }
+  to   { transform: translate(-28%, -18%) scale(0.9); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .screen::before, .screen::after { animation: none; }
+}
+
+/* Animation "pop" sur n'importe quel bouton cliqué */
+@keyframes btnPop {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(0.88); }
+  70%  { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+.btn-pop { animation: btnPop .26s ease; }
+@media (prefers-reduced-motion: reduce) {
+  .btn-pop { animation: none; }
+}
+
 /* Dynamic Island */
 .dynamic-island {
   position: absolute;
@@ -208,6 +257,61 @@ main::-webkit-scrollbar { width: 0; }
 }
 .tabseg-btn.on { background: #fff; color: #0a0a0c; }
 
+/* En-tête d'écran avec bouton "+" (Rappels / Agenda / Carnet) */
+.screen-head { display: flex; align-items: center; justify-content: space-between; }
+.screen-head .page-title { margin: 6px 4px 12px; }
+.add-btn {
+  width: 38px; height: 38px; flex-shrink: 0;
+  border: none; border-radius: 12px; cursor: pointer;
+  background: #fff; color: #0a0a0c;
+  font-size: 22px; font-weight: 600; line-height: 1;
+  display: grid; place-items: center;
+}
+.add-btn:active { transform: scale(.92); }
+
+/* Bannière "relié à…" */
+.app-banner {
+  background: var(--surface);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  color: var(--text2);
+  margin-bottom: 12px;
+}
+
+/* Formulaire d'ajout inline */
+.addform {
+  background: var(--surface);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+.addform .field {
+  width: 100%;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.10);
+  color: #fff;
+  border-radius: 12px;
+  padding: 12px;
+  font-family: inherit;
+  font-size: 15px;
+}
+.addform .field::placeholder { color: var(--text3); }
+.cn-preview, .cn-img {
+  width: 100%; border-radius: 12px; margin-top: 10px;
+  max-height: 220px; object-fit: cover; display: block;
+}
+
+/* Pastille date (Agenda) */
+.cal-date {
+  width: 52px; flex-shrink: 0; text-align: center;
+  background: var(--surface-strong); border-radius: 12px; padding: 6px 0;
+}
+.cal-day { font-size: 22px; font-weight: 700; line-height: 1; }
+.cal-mon { font-size: 11px; color: var(--text2); text-transform: uppercase; }
+
 /* Cards */
 .card {
   background: var(--surface);
@@ -246,12 +350,13 @@ main::-webkit-scrollbar { width: 0; }
   padding-bottom: 16px;
 }
 .tab {
-  flex: 1; background: none; border: none; cursor: pointer;
+  flex: 1; min-width: 0; background: none; border: none; cursor: pointer;
   color: var(--text3);
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 3px; font-size: 10px; font-weight: 500;
+  gap: 2px; font-size: 8.5px; font-weight: 500; padding: 0 1px;
 }
-.tab .ti { font-size: 20px; filter: grayscale(1) opacity(.6); }
+.tab span:last-child { white-space: nowrap; }
+.tab .ti { font-size: 18px; filter: grayscale(1) opacity(.6); }
 .tab.active { color: #fff; }
 .tab.active .ti { filter: none; }
 

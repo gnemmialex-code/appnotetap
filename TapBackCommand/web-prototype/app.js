@@ -25,6 +25,9 @@
     todos: Store.get("todos", []),
     requests: Store.get("requests", []),
     reading: Store.get("reading", []),
+    reminders: Store.get("reminders", []),
+    calevents: Store.get("calevents", []),
+    carnet: Store.get("carnet", []),
   };
 
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -111,6 +114,9 @@
     if (State.tab === "notes") renderNotes();
     if (State.tab === "todos") renderTodos();
     if (State.tab === "reading") renderReading();
+    if (State.tab === "reminders") renderReminders();
+    if (State.tab === "calendar") renderCalendar();
+    if (State.tab === "carnet") renderCarnet();
   }
 
   function emptyState(ico, title, msg) {
@@ -758,6 +764,156 @@
     });
   }
 
+  // ============================================================
+  // Sections d'app supplémentaires : Rappels · Agenda · Carnet
+  // ============================================================
+
+  function screenHead(title, onAdd) {
+    const h = el("div", "screen-head");
+    h.appendChild(el("div", "page-title", title));
+    const add = el("button", "add-btn", "＋");
+    add.onclick = onAdd;
+    h.appendChild(add);
+    return h;
+  }
+  function banner(text) { return el("div", "app-banner", text); }
+  const toggleForm = (form, firstFieldSel) => {
+    const open = form.style.display === "none";
+    form.style.display = open ? "block" : "none";
+    if (open && firstFieldSel) { const f = $(firstFieldSel, form); if (f) f.focus(); }
+  };
+
+  // ----- Rappels (relié à l'app Rappels d'Apple — simulé) -----
+  function renderReminders() {
+    content.innerHTML = "";
+    const form = el("div", "addform");
+    form.style.display = "none";
+    form.innerHTML = `
+      <input class="field" id="rmText" placeholder="Intitulé du rappel…" autocomplete="off">
+      <input type="datetime-local" class="field" id="rmDate" style="margin-top:8px">
+      <button class="btn btn-primary" id="rmSave" style="margin-top:10px">Ajouter le rappel</button>`;
+    content.appendChild(screenHead("Rappels", () => toggleForm(form, "#rmText")));
+    content.appendChild(banner("🔗 Relié à l'app Rappels d'Apple (simulé dans la démo)"));
+    content.appendChild(form);
+    $("#rmSave", form).onclick = () => {
+      const text = $("#rmText", form).value.trim();
+      if (!text) return;
+      const v = $("#rmDate", form).value;
+      State.reminders.unshift({ id: uid(), createdAt: Date.now(), text,
+        due: v ? new Date(v).getTime() : null, done: false });
+      Store.set("reminders", State.reminders); render(); haptic();
+    };
+    if (!State.reminders.length) {
+      content.appendChild(emptyState("🔔", "Aucun rappel",
+        "Touche « ＋ » pour créer un rappel (synchronisé avec l'app Rappels dans la vraie app)."));
+      return;
+    }
+    State.reminders.forEach(rm => {
+      const c = el("div", "card"); const r = el("div", "row-flex");
+      const chk = el("button", null, rm.done ? "✅" : "⚪️");
+      chk.style.cssText = "background:none;border:none;font-size:22px;cursor:pointer;line-height:1;";
+      chk.onclick = () => { rm.done = !rm.done; Store.set("reminders", State.reminders); render(); };
+      const mid = el("div"); mid.style.flex = "1";
+      mid.innerHTML = `<div class="row-title" style="${rm.done ? "opacity:.4;text-decoration:line-through" : ""}">${esc(rm.text)}</div>` +
+        (rm.due ? `<div class="row-sub">⏰ ${stamp(rm.due)}</div>` : "");
+      const del = el("button", "swipe-del", "🗑");
+      del.onclick = () => { State.reminders = State.reminders.filter(x => x.id !== rm.id); Store.set("reminders", State.reminders); render(); };
+      r.append(chk, mid, del); c.appendChild(r); content.appendChild(c);
+    });
+  }
+
+  // ----- Agenda (calendrier éditable — simulé) -----
+  function renderCalendar() {
+    content.innerHTML = "";
+    const form = el("div", "addform");
+    form.style.display = "none";
+    form.innerHTML = `
+      <input class="field" id="evTitle" placeholder="Titre de l'événement…" autocomplete="off">
+      <input type="datetime-local" class="field" id="evDate" style="margin-top:8px">
+      <input class="field" id="evNote" placeholder="Lieu / note (optionnel)…" style="margin-top:8px" autocomplete="off">
+      <button class="btn btn-primary" id="evSave" style="margin-top:10px">Ajouter à l'agenda</button>`;
+    content.appendChild(screenHead("Agenda", () => toggleForm(form, "#evTitle")));
+    content.appendChild(banner("🔗 Relié à ton calendrier — ajoute/modifie ici (simulé dans la démo)"));
+    content.appendChild(form);
+    $("#evSave", form).onclick = () => {
+      const title = $("#evTitle", form).value.trim();
+      const v = $("#evDate", form).value;
+      if (!title || !v) return;
+      State.calevents.unshift({ id: uid(), title, when: new Date(v).getTime(),
+        note: $("#evNote", form).value.trim() });
+      Store.set("calevents", State.calevents); render(); haptic();
+    };
+    if (!State.calevents.length) {
+      content.appendChild(emptyState("📅", "Aucun événement",
+        "Touche « ＋ » pour ajouter un événement à ton agenda."));
+      return;
+    }
+    [...State.calevents].sort((a, b) => a.when - b.when).forEach(ev => {
+      const c = el("div", "card"); const r = el("div", "row-flex");
+      const d = new Date(ev.when);
+      const box = el("div", "cal-date");
+      box.innerHTML = `<div class="cal-day">${d.getDate()}</div><div class="cal-mon">${d.toLocaleDateString("fr-FR", { month: "short" })}</div>`;
+      const mid = el("div"); mid.style.flex = "1";
+      mid.innerHTML = `<div class="row-title">${esc(ev.title)}</div>` +
+        `<div class="row-sub">🕒 ${d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}${ev.note ? " · " + esc(ev.note) : ""}</div>`;
+      const del = el("button", "swipe-del", "🗑");
+      del.onclick = () => { State.calevents = State.calevents.filter(x => x.id !== ev.id); Store.set("calevents", State.calevents); render(); };
+      r.append(box, mid, del); c.appendChild(r); content.appendChild(c);
+    });
+  }
+
+  // ----- Carnet (notes détaillées : titre, note, date, heure, image) -----
+  function renderCarnet() {
+    content.innerHTML = "";
+    let imgData = null;
+    const form = el("div", "addform");
+    form.style.display = "none";
+    form.innerHTML = `
+      <input class="field" id="cnTitle" placeholder="Titre…" autocomplete="off">
+      <textarea class="field" id="cnNote" rows="3" placeholder="Note détaillée…" style="margin-top:8px"></textarea>
+      <input type="datetime-local" class="field" id="cnDate" style="margin-top:8px">
+      <label class="btn btn-ghost" style="margin-top:8px;cursor:pointer;display:flex;justify-content:center">🖼 Ajouter une image
+        <input type="file" id="cnImg" accept="image/*" style="display:none"></label>
+      <div id="cnPreview"></div>
+      <button class="btn btn-primary" id="cnSave" style="margin-top:10px">Enregistrer la fiche</button>`;
+    content.appendChild(screenHead("Carnet", () => toggleForm(form, "#cnTitle")));
+    content.appendChild(form);
+    $("#cnImg", form).onchange = (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      const rd = new FileReader();
+      rd.onload = () => { imgData = rd.result; $("#cnPreview", form).innerHTML = `<img src="${imgData}" class="cn-preview">`; };
+      rd.readAsDataURL(f);
+    };
+    $("#cnSave", form).onclick = () => {
+      const title = $("#cnTitle", form).value.trim();
+      const note = $("#cnNote", form).value.trim();
+      if (!title && !note) return;
+      const v = $("#cnDate", form).value;
+      State.carnet.unshift({ id: uid(), createdAt: Date.now(), title: title || "Fiche",
+        note, when: v ? new Date(v).getTime() : null, img: imgData });
+      try { Store.set("carnet", State.carnet); }
+      catch { alert("Image trop lourde pour la démo (stockage local plein)."); }
+      render(); haptic();
+    };
+    if (!State.carnet.length) {
+      content.appendChild(emptyState("📔", "Carnet vide",
+        "Touche « ＋ » pour créer une fiche : titre, note, date, heure, image."));
+      return;
+    }
+    State.carnet.forEach(f => {
+      const c = el("div", "card");
+      let html = `<div class="row-title">${esc(f.title)}</div>`;
+      if (f.note) html += `<div class="row-sub">${esc(f.note)}</div>`;
+      if (f.when) html += `<div class="row-date">🕒 ${stamp(f.when)}</div>`;
+      c.innerHTML = html;
+      if (f.img) { const im = el("img"); im.src = f.img; im.className = "cn-img"; c.appendChild(im); }
+      const del = el("button", "swipe-del", "🗑"); del.style.marginTop = "8px";
+      del.onclick = () => { State.carnet = State.carnet.filter(x => x.id !== f.id); Store.set("carnet", State.carnet); render(); };
+      c.appendChild(del);
+      content.appendChild(c);
+    });
+  }
+
   // ---------- Haptics (vibration where supported) ----------
   function haptic() { if (navigator.vibrate) navigator.vibrate(8); }
 
@@ -787,6 +943,16 @@
   // ============================================================
   // WIRING
   // ============================================================
+
+  // Animation "pop" sur tout bouton cliqué (feedback visuel global).
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest("button, .tapback-btn, .app-icon.launch");
+    if (!btn) return;
+    btn.classList.remove("btn-pop");
+    void btn.offsetWidth;            // force le redémarrage de l'animation
+    btn.classList.add("btn-pop");
+  }, true);
+
   document.querySelectorAll(".tab").forEach(t =>
     t.onclick = () => { State.tab = t.dataset.tab; render(); });
 

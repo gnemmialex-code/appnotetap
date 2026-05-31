@@ -537,6 +537,17 @@ main::-webkit-scrollbar { width: 0; }
 /* Fenêtre à 2 colonnes (quand « Mon espace » est retiré) */
 .floating.cols2 { grid-template-columns: repeat(2, 1fr); }
 
+/* Marque "Shortist" en haut de la fenêtre flottante */
+.cmd-brand {
+  grid-column: 1 / -1;
+  text-align: center;
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: .02em;
+  color: #0a0a0c;
+  padding: 2px 0 4px;
+}
+
 /* Bouton "Voir plus / Voir moins" */
 .cmd-more {
   grid-column: 1 / -1;

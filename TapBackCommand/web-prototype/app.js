@@ -330,6 +330,7 @@
           <button class="cmd-btn wide" data-act="todos"><span class="ci">✅</span><span>Voir To-Do</span></button>
         </div>` : "";
       floating.innerHTML = `
+        <div class="cmd-brand">Shortist</div>
         <button class="cmd-btn rec" data-act="voice"><span class="ci">🎙️</span><span>Note</span></button>
         <button class="cmd-btn" data-act="todo"><span class="ci">✏️</span><span>To-Do</span></button>
         <button class="cmd-btn" data-act="reading"><span class="ci">🔖</span><span>À lire</span></button>
@@ -1075,7 +1076,7 @@
     const ver = el("div", "set-note");
     ver.style.textAlign = "center";
     ver.style.marginTop = "10px";
-    ver.textContent = "TapBack Note — v1.0.0 (démo)";
+    ver.textContent = "Shortist — v1.0.0 (démo)";
     content.appendChild(ver);
   }
 

@@ -57,7 +57,7 @@ class TapBackApp extends StatelessWidget {
       ),
     );
     return MaterialApp(
-      title: 'TapBack Note',
+      title: 'Shortist',
       debugShowCheckedModeBanner: false,
       theme: base,
       home: const HomePage(),
@@ -1011,7 +1011,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               )),
           const SizedBox(height: 10),
           const Center(
-            child: Text('TapBack Note — v1.0.0',
+            child: Text('Shortist — v1.0.0',
                 style: TextStyle(fontSize: 12, color: Colors.white38)),
           ),
         ],
@@ -1259,6 +1259,15 @@ class _CommandPanelState extends State<CommandPanel> {
       key: const ValueKey('choices'),
       mainAxisSize: MainAxisSize.min,
       children: [
+        const Padding(
+          padding: EdgeInsets.only(bottom: 8),
+          child: Text('Shortist',
+              style: TextStyle(
+                  color: Colors.black,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.2)),
+        ),
         Row(
           children: [
             _cmd(Icons.edit_note, 'Note', () => setState(() => _mode = _Mode.note)),

@@ -19,6 +19,7 @@
   const State = {
     scene: "home",          // "home" (springboard) | "app"
     tab: "notes",
+    todoArchive: false,     // onglet To-Do : false = À faire, true = Terminées
     notes: Store.get("notes", []),
     todos: Store.get("todos", []),
     searches: Store.get("searches", []),
@@ -147,31 +148,85 @@
   }
 
   // ----- Todos -----
+  // Une tâche est archivée si terminée depuis ≥ 24 h.
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const isArchived = (t) => t.done && t.doneAt && (Date.now() - t.doneAt) >= DAY_MS;
+
   function renderTodos() {
     content.innerHTML = "";
     content.appendChild(el("div", "page-title", "To-Do"));
-    if (!State.todos.length) {
-      content.appendChild(emptyState("✅", "Aucune tâche",
-        "Clique sur <b>Tap Back</b> puis ✏️ pour ajouter une tâche."));
+
+    const active = State.todos.filter(t => !isArchived(t));
+    const done = State.todos.filter(t => t.done)
+      .sort((a, b) => (b.doneAt || b.createdAt) - (a.doneAt || a.createdAt));
+
+    // Sélecteur À faire / Terminées
+    const seg = el("div", "tabseg");
+    const mkSeg = (label, on, fn) => {
+      const b = el("button", "tabseg-btn" + (on ? " on" : ""), label);
+      b.onclick = fn;
+      return b;
+    };
+    seg.append(
+      mkSeg(`À faire (${active.length})`, !State.todoArchive,
+        () => { State.todoArchive = false; render(); }),
+      mkSeg(`Terminées (${done.length})`, State.todoArchive,
+        () => { State.todoArchive = true; render(); })
+    );
+    content.appendChild(seg);
+
+    const list = State.todoArchive ? done : active;
+    if (!list.length) {
+      content.appendChild(emptyState(
+        State.todoArchive ? "🗂️" : "✅",
+        State.todoArchive ? "Aucune tâche terminée" : "Aucune tâche",
+        State.todoArchive
+          ? "Les tâches cochées « Fait » sont conservées ici avec leurs dates."
+          : "Clique sur <b>Tap Back</b> puis ✏️ pour ajouter une tâche."));
       return;
     }
-    State.todos.forEach(t => {
-      const c = el("div", "card");
-      const r = el("div", "row-flex");
-      const chk = el("button", null,
-        t.done ? "✅" : "⚪️");
-      chk.style.cssText = "background:none;border:none;font-size:22px;cursor:pointer;line-height:1;";
-      chk.onclick = () => { t.done = !t.done; Store.set("todos", State.todos); render(); };
-      const mid = el("div");
-      mid.style.flex = "1";
-      mid.innerHTML = `<div class="row-title" style="${t.done ? "opacity:.4;text-decoration:line-through" : ""}">${esc(t.text)}</div>` +
-        (t.reminder ? `<div class="row-sub">🔔 ${stamp(t.reminder)}</div>` : "");
-      const del = el("button", "swipe-del", "🗑");
-      del.onclick = () => { State.todos = State.todos.filter(x => x.id !== t.id); Store.set("todos", State.todos); render(); };
-      r.append(chk, mid, del);
-      c.appendChild(r);
-      content.appendChild(c);
-    });
+
+    list.forEach(t => State.todoArchive ? content.appendChild(archiveCard(t))
+                                        : content.appendChild(activeCard(t)));
+  }
+
+  function activeCard(t) {
+    const c = el("div", "card");
+    const r = el("div", "row-flex");
+    const chk = el("button", null, t.done ? "✅" : "⚪️");
+    chk.style.cssText = "background:none;border:none;font-size:22px;cursor:pointer;line-height:1;";
+    chk.onclick = () => {
+      t.done = !t.done;
+      t.doneAt = t.done ? Date.now() : null;
+      Store.set("todos", State.todos);
+      render();
+    };
+    const mid = el("div");
+    mid.style.flex = "1";
+    mid.innerHTML =
+      `<div class="row-title" style="${t.done ? "opacity:.4;text-decoration:line-through" : ""}">${esc(t.text)}</div>` +
+      (t.done ? `<div class="row-sub">Fait · retiré de la liste dans 24 h</div>` : "");
+    const del = el("button", "swipe-del", "🗑");
+    del.onclick = () => { State.todos = State.todos.filter(x => x.id !== t.id); Store.set("todos", State.todos); render(); };
+    r.append(chk, mid, del);
+    c.appendChild(r);
+    return c;
+  }
+
+  function archiveCard(t) {
+    const c = el("div", "card");
+    const r = el("div", "row-flex");
+    const ic = el("div", "thumb"); ic.textContent = "✅";
+    const mid = el("div"); mid.style.flex = "1";
+    mid.innerHTML =
+      `<div class="row-title" style="text-decoration:line-through;opacity:.7">${esc(t.text)}</div>` +
+      `<div class="row-date">Créée : ${stamp(t.createdAt)}</div>` +
+      (t.doneAt ? `<div class="row-sub" style="color:#30d158">Faite : ${stamp(t.doneAt)}</div>` : "");
+    const del = el("button", "swipe-del", "🗑");
+    del.onclick = () => { State.todos = State.todos.filter(x => x.id !== t.id); Store.set("todos", State.todos); render(); };
+    r.append(ic, mid, del);
+    c.appendChild(r);
+    return c;
   }
 
   // ----- Searches (historique des recherches) -----
@@ -233,7 +288,10 @@
         <button class="cmd-btn rec" data-act="voice"><span class="ci">🎙️</span><span>Note</span></button>
         <button class="cmd-btn" data-act="todo"><span class="ci">✏️</span><span>To-Do</span></button>
         <button class="cmd-btn" data-act="search"><span class="ci">🔍</span><span>Rechercher</span></button>
-        <button class="cmd-btn wide" data-act="notes"><span class="ci">📓</span><span>Voir les notes</span></button>`;
+        <div class="cmd-open-row">
+          <button class="cmd-btn wide" data-act="notes"><span class="ci">📓</span><span>Voir les notes</span></button>
+          <button class="cmd-btn wide" data-act="todos"><span class="ci">✅</span><span>Voir To-Do</span></button>
+        </div>`;
       floating.querySelectorAll(".cmd-btn").forEach(b =>
         b.onclick = () => {
           const act = b.dataset.act;
@@ -241,6 +299,7 @@
           if (act === "todo")   return openPanel("To-Do", todoPanel);
           if (act === "search") return openPanel("Rechercher", searchPanel);
           if (act === "notes")  { hideOverlay(); setTimeout(showNotesList, 180); }
+          if (act === "todos")  { hideOverlay(); setTimeout(showTodosList, 180); }
         });
     };
     if (smooth) smoothSwap(floating, build); else build();
@@ -299,7 +358,7 @@
     });
     add.onclick = () => {
       if (!ta.value.trim()) return;
-      State.todos.unshift({ id: uid(), createdAt: Date.now(), text: ta.value.trim(), done: false, reminder: null });
+      State.todos.unshift({ id: uid(), createdAt: Date.now(), text: ta.value.trim(), done: false, doneAt: null });
       Store.set("todos", State.todos);
       State.tab = "todos"; render();
       hideOverlay(); haptic();
@@ -310,6 +369,13 @@
   function showNotesList() {
     launchApp();
     State.tab = "notes";
+    render();
+    haptic();
+  }
+  /** "Voir To-Do" : ouvre l'app sur l'onglet To-Do. */
+  function showTodosList() {
+    launchApp();
+    State.tab = "todos";
     render();
     haptic();
   }

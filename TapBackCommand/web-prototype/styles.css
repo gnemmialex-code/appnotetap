@@ -185,6 +185,29 @@ main::-webkit-scrollbar { width: 0; }
 
 .page-title { font-size: 34px; font-weight: 600; margin: 6px 4px 16px; letter-spacing: .01em; }
 
+/* Sélecteur À faire / Terminées (onglet To-Do) */
+.tabseg {
+  display: flex;
+  background: var(--surface);
+  border-radius: 14px;
+  padding: 3px;
+  margin: 0 4px 14px;
+}
+.tabseg-btn {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--text2);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 9px 6px;
+  border-radius: 11px;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.tabseg-btn.on { background: #fff; color: #0a0a0c; }
+
 /* Cards */
 .card {
   background: var(--surface);
@@ -281,15 +304,20 @@ main::-webkit-scrollbar { width: 0; }
 .cmd-btn .ci { font-size: 23px; }
 .cmd-btn.rec .ci { color: var(--record); }
 
-/* "Voir les notes" : pleine largeur, blanche aussi */
-.cmd-btn.wide {
+/* Rangée des 2 boutons d'ouverture ("Voir les notes" + "Voir To-Do") */
+.cmd-open-row {
   grid-column: 1 / -1;
+  display: flex;
+  gap: 7px;
+}
+.cmd-btn.wide {
+  flex: 1;
   flex-direction: row;
-  gap: 8px;
+  gap: 6px;
   padding: 12px;
   background: #ffffff;
   color: #0a0a0c;
-  font-size: 14px;
+  font-size: 13px;
 }
 .cmd-btn.wide:active { background: #ececf0; }
 

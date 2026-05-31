@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Info.plist — TapBack Command
+
+  Add these usage-description keys to your target's Info tab (or merge this
+  file). iOS will reject the app at runtime if a permission is requested
+  without its matching string.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>TapBack utilise le micro pour enregistrer vos notes vocales.</string>
+
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>TapBack transcrit vos notes vocales sur l'appareil grâce à la reconnaissance vocale.</string>
+
+    <key>NSRemindersFullAccessUsageDescription</key>
+    <string>TapBack peut créer des rappels iOS pour vos tâches.</string>
+
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>TapBack utilise vos photos pour les captures intelligentes et le marquage automatique.</string>
+
+    <!-- Recording can finish briefly in the background. -->
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>audio</string>
+    </array>
+
+    <!-- Make App Intents / Shortcuts available. -->
+    <key>NSUserActivityTypes</key>
+    <array>
+        <string>OpenTapBackCommandIntent</string>
+        <string>StartVoiceNoteIntent</string>
+        <string>QuickTodoIntent</string>
+        <string>SmartCaptureIntent</string>
+    </array>
+</dict>
+</plist>

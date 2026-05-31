@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TapBack Command — Prototype</title>
+  <!-- Source Sans 3 : sans-serif humaniste libre (Adobe), le plus proche de Myriad Pro.
+       Pour utiliser ton vrai Myriad Pro Semibold : dépose le .woff2 et déclare un @font-face. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="stage">
+
+    <!-- ============ iPhone 16 ============ -->
+    <div class="phone-area">
+      <div class="phone" id="phone">
+        <!-- volume / power side buttons (decorative) -->
+        <span class="btn-action"></span>
+        <span class="btn-volup"></span>
+        <span class="btn-voldown"></span>
+        <span class="btn-power"></span>
+
+        <div class="screen" id="screen">
+          <!-- Dynamic Island -->
+          <div class="dynamic-island" id="island"></div>
+
+          <!-- Status bar -->
+          <div class="statusbar">
+            <span id="clock">9:41</span>
+            <span class="status-icons">
+              <span>􀙇</span><span>􀛤</span><span class="battery"></span>
+            </span>
+          </div>
+
+          <!-- ===== Home screen (iOS springboard) ===== -->
+          <div class="springboard" id="springboard">
+            <div class="sb-clock">
+              <div class="sb-time" id="sbTime">9:41</div>
+              <div class="sb-date" id="sbDate">lundi 31 mai</div>
+            </div>
+            <div class="app-grid" id="appGrid">
+              <div class="app-icon decor"><span style="background:#34c759">📅</span><label>Agenda</label></div>
+              <div class="app-icon decor"><span style="background:#0a84ff">🧭</span><label>Safari</label></div>
+              <div class="app-icon decor"><span style="background:#30d158">💬</span><label>Messages</label></div>
+              <div class="app-icon decor"><span style="background:#ff375f">▶️</span><label>YouTube</label></div>
+              <div class="app-icon decor"><span style="background:#ff9f0a">📷</span><label>Photos</label></div>
+              <div class="app-icon decor"><span style="background:#5e5ce6">⚙️</span><label>Réglages</label></div>
+              <div class="app-icon decor"><span style="background:#ffd60a">🗒️</span><label>Notes</label></div>
+              <div class="app-icon launch" id="iconTapBack"><span class="tb-app">⚡️</span><label>TapBack</label></div>
+            </div>
+            <div class="dock">
+              <div class="app-icon decor"><span style="background:#30d158">📞</span></div>
+              <div class="app-icon decor"><span style="background:#0a84ff">✉️</span></div>
+              <div class="app-icon decor"><span style="background:#34c759">🎵</span></div>
+              <div class="app-icon launch" id="dockTapBack"><span class="tb-app">⚡️</span></div>
+            </div>
+          </div>
+
+          <!-- ===== App layer (TapBack Command) ===== -->
+          <div class="app-layer" id="appLayer">
+            <!-- App content (rendered by JS) -->
+            <main id="content"></main>
+
+            <!-- Tab bar -->
+            <nav class="tabbar" id="tabbar">
+              <button data-tab="notes" class="tab active">
+                <span class="ti">🎙️</span><span>Notes</span>
+              </button>
+              <button data-tab="todos" class="tab">
+                <span class="ti">✅</span><span>To-Do</span>
+              </button>
+              <button data-tab="searches" class="tab">
+                <span class="ti">🔍</span><span>Recherches</span>
+              </button>
+            </nav>
+          </div>
+
+          <!-- Floating command overlay -->
+          <div class="overlay-host" id="overlayHost"></div>
+
+          <!-- Action sheets -->
+          <div class="sheet-host" id="sheetHost"></div>
+
+          <!-- Home indicator (clic = retour à l'accueil) -->
+          <div class="home-indicator" id="homeIndicator" title="Retour à l'accueil"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ Side controls ============ -->
+    <aside class="side">
+      <h1>TapBack <span>Command</span></h1>
+      <p class="muted">Prototype web — iPhone 16</p>
+
+      <button class="tapback-btn" id="tapbackBtn">
+        <span class="tb-icon">􀟜</span>
+        <span class="tb-label">Tap&nbsp;Back</span>
+        <span class="tb-sub">(tapote le dos)</span>
+      </button>
+
+      <p class="hint">Clique sur <b>Tap Back</b> (ou double-clic sur le châssis / touche <kbd>T</kbd>) : la <b>mini-fenêtre du haut</b> s'affiche <b>sur la page courante</b> (accueil ou app) — l'app ne s'ouvre pas. Choisis ensuite une action.</p>
+
+      <div class="legend">
+        <div><span class="dot red"></span>🎙️ Note vocale — micro + transcription</div>
+        <div><span class="dot"></span>✏️ To-Do — ajout + rappel</div>
+        <div><span class="dot"></span>📓 Voir les notes — ouvre la liste</div>
+        <div><span class="dot"></span>🔍 Rechercher — définition / explication d'un mot</div>
+      </div>
+
+      <p class="hint" style="margin-top:14px">Astuce : la barre du bas (home indicator) ou la touche <kbd>H</kbd> ramène à l'accueil pour rejouer le scénario « Tap Back depuis une autre app ».</p>
+
+      <p class="warn">⚠️ Sur un vrai iPhone, iOS n'autorise pas d'overlay par-dessus les autres apps : le Tap-Back amène TapBack Command au premier plan sur la mini-fenêtre. Cette maquette reproduit fidèlement ce comportement.</p>
+    </aside>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

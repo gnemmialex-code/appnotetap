@@ -18,7 +18,8 @@
   // ---------- App state (≈ AppRouter + ViewModels) ----------
   const State = {
     scene: "home",          // "home" (springboard) | "app"
-    tab: "notes",
+    tab: "capture",         // onglet capture = Notes/To-Do/À lire (swipe)
+    capIndex: 0,            // sous-écran capture : 0 Notes · 1 To-Do · 2 À lire
     todoArchive: false,     // onglet To-Do : false = À faire, true = Terminées
     showMore: false,        // fenêtre de commande : dévoiler "Voir les notes/To-Do"
     notes: Store.get("notes", []),
@@ -112,9 +113,7 @@
   function render() {
     document.querySelectorAll(".tab").forEach(t =>
       t.classList.toggle("active", t.dataset.tab === State.tab));
-    if (State.tab === "notes") renderNotes();
-    if (State.tab === "todos") renderTodos();
-    if (State.tab === "reading") renderReading();
+    if (State.tab === "capture") renderCapture();
     if (State.tab === "reminders") renderReminders();
     if (State.tab === "calendar") renderCalendar();
     if (State.tab === "carnet") renderCarnet();
@@ -128,11 +127,11 @@
   }
 
   // ----- Notes -----
-  function renderNotes() {
-    content.innerHTML = "";
-    content.appendChild(el("div", "page-title", "Notes"));
+  function renderNotes(target = content, withTitle = true) {
+    target.innerHTML = "";
+    if (withTitle) target.appendChild(el("div", "page-title", "Notes"));
     if (!State.notes.length) {
-      content.appendChild(emptyState("🎙️", "Aucune note",
+      target.appendChild(emptyState("🎙️", "Aucune note",
         "Clique sur <b>Tap Back</b> puis 🎙️ pour enregistrer une note vocale."));
       return;
     }
@@ -153,7 +152,7 @@
       del.onclick = () => { State.notes = State.notes.filter(x => x.id !== n.id); Store.set("notes", State.notes); render(); };
       actions.appendChild(del);
       c.appendChild(actions);
-      content.appendChild(c);
+      target.appendChild(c);
     });
   }
 
@@ -162,9 +161,9 @@
   const DAY_MS = 24 * 60 * 60 * 1000;
   const isArchived = (t) => t.done && t.doneAt && (Date.now() - t.doneAt) >= DAY_MS;
 
-  function renderTodos() {
-    content.innerHTML = "";
-    content.appendChild(el("div", "page-title", "To-Do"));
+  function renderTodos(target = content, withTitle = true) {
+    target.innerHTML = "";
+    if (withTitle) target.appendChild(el("div", "page-title", "To-Do"));
 
     const active = State.todos.filter(t => !isArchived(t));
     const done = State.todos.filter(t => t.done)
@@ -183,11 +182,11 @@
       mkSeg(`Terminées (${done.length})`, State.todoArchive,
         () => { State.todoArchive = true; render(); })
     );
-    content.appendChild(seg);
+    target.appendChild(seg);
 
     const list = State.todoArchive ? done : active;
     if (!list.length) {
-      content.appendChild(emptyState(
+      target.appendChild(emptyState(
         State.todoArchive ? "🗂️" : "✅",
         State.todoArchive ? "Aucune tâche terminée" : "Aucune tâche",
         State.todoArchive
@@ -196,8 +195,8 @@
       return;
     }
 
-    list.forEach(t => State.todoArchive ? content.appendChild(archiveCard(t))
-                                        : content.appendChild(activeCard(t)));
+    list.forEach(t => State.todoArchive ? target.appendChild(archiveCard(t))
+                                        : target.appendChild(activeCard(t)));
   }
 
   function activeCard(t) {
@@ -393,22 +392,22 @@
       if (!ta.value.trim()) return;
       State.todos.unshift({ id: uid(), createdAt: Date.now(), text: ta.value.trim(), done: false, doneAt: null });
       Store.set("todos", State.todos);
-      State.tab = "todos"; render();
+      State.tab = "capture"; State.capIndex = 1; render();
       hideOverlay(); haptic();
     };
   }
 
-  /** "Voir les notes" : ouvre l'app sur l'onglet Notes. */
+  /** "Voir les notes" : ouvre le hub Capture sur Notes. */
   function showNotesList() {
     launchApp();
-    State.tab = "notes";
+    State.tab = "capture"; State.capIndex = 0;
     render();
     haptic();
   }
-  /** "Voir To-Do" : ouvre l'app sur l'onglet To-Do. */
+  /** "Voir To-Do" : ouvre le hub Capture sur To-Do. */
   function showTodosList() {
     launchApp();
-    State.tab = "todos";
+    State.tab = "capture"; State.capIndex = 1;
     render();
     haptic();
   }
@@ -561,7 +560,7 @@
       }
       const done = el("button", "btn btn-primary", "✓ Sauver & fermer");
       done.style.marginTop = "14px";
-      done.onclick = () => { State.tab = "notes"; render(); hideOverlay(); };
+      done.onclick = () => { State.tab = "capture"; State.capIndex = 0; render(); hideOverlay(); };
       results.appendChild(done);
       haptic();
     }, 700);
@@ -713,7 +712,7 @@
         if (remindAt) scheduleReadReminder(text, remindAt);
       });
       Store.set("reading", State.reading);
-      State.tab = "reading"; render();
+      State.tab = "capture"; State.capIndex = 2; render();
       hideOverlay(); haptic();
     };
   }
@@ -730,11 +729,11 @@
     });
   }
 
-  function renderReading() {
-    content.innerHTML = "";
-    content.appendChild(el("div", "page-title", "À lire"));
+  function renderReading(target = content, withTitle = true) {
+    target.innerHTML = "";
+    if (withTitle) target.appendChild(el("div", "page-title", "À lire"));
     if (!State.reading.length) {
-      content.appendChild(emptyState("🔖", "Rien à lire pour l'instant",
+      target.appendChild(emptyState("🔖", "Rien à lire pour l'instant",
         "Clique sur <b>Tap Back</b> puis 🔖 <b>À lire</b> pour garder un lien/texte et programmer un rappel."));
       return;
     }
@@ -762,7 +761,78 @@
       right.appendChild(del);
       r.append(chk, mid, right);
       c.appendChild(r);
-      content.appendChild(c);
+      target.appendChild(c);
+    });
+  }
+
+  // ----- Capture : Notes + To-Do + À lire dans un seul écran swipeable -----
+  function renderCapture() {
+    content.innerHTML = "";
+    const panes = ["notes", "todos", "reading"];
+    const labels = { notes: "🎙️ Notes", todos: "✅ To-Do", reading: "🔖 À lire" };
+
+    // Mini-onglet (segment)
+    const seg = el("div", "cap-seg");
+    const scroller = el("div", "cap-scroller");
+    const paneEls = {};
+    panes.forEach(k => { const p = el("div", "cap-pane"); paneEls[k] = p; scroller.appendChild(p); });
+
+    // Contenu de chaque volet (sans gros titre, le segment sert d'en-tête)
+    renderNotes(paneEls.notes, false);
+    renderTodos(paneEls.todos, false);
+    renderReading(paneEls.reading, false);
+
+    const updateSeg = () => {
+      [...seg.children].forEach((c, i) => c.classList.toggle("on", i === State.capIndex));
+    };
+    const goTo = (i) => {
+      State.capIndex = i;
+      scroller.scrollTo({ left: i * scroller.clientWidth, behavior: "smooth" });
+      updateSeg();
+    };
+    panes.forEach((k, i) => {
+      const b = el("button", "cap-seg-btn", labels[k]);
+      b.onclick = () => goTo(i);
+      seg.appendChild(b);
+    });
+
+    content.appendChild(seg);
+    content.appendChild(scroller);
+    updateSeg();
+
+    // Position initiale sur le bon volet (sans animation)
+    requestAnimationFrame(() => { scroller.scrollLeft = State.capIndex * scroller.clientWidth; });
+
+    // Mise à jour du segment quand on swipe (scroll horizontal)
+    let st;
+    scroller.onscroll = () => {
+      clearTimeout(st);
+      st = setTimeout(() => {
+        const i = Math.round(scroller.scrollLeft / scroller.clientWidth);
+        if (i !== State.capIndex) { State.capIndex = i; updateSeg(); }
+      }, 60);
+    };
+
+    // Glisser à la souris (swipe sur desktop) sans bloquer les clics internes
+    scroller.addEventListener("pointerdown", (e) => {
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      const startX = e.clientX, startLeft = scroller.scrollLeft;
+      let dragging = false;
+      const move = (ev) => {
+        const dx = ev.clientX - startX;
+        if (Math.abs(dx) > 5) dragging = true;
+        if (dragging) scroller.scrollLeft = startLeft - dx;
+      };
+      const up = () => {
+        document.removeEventListener("pointermove", move);
+        document.removeEventListener("pointerup", up);
+        if (dragging) {
+          const i = Math.round(scroller.scrollLeft / scroller.clientWidth);
+          goTo(Math.max(0, Math.min(2, i)));
+        }
+      };
+      document.addEventListener("pointermove", move);
+      document.addEventListener("pointerup", up);
     });
   }
 

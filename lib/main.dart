@@ -72,7 +72,8 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  int _tab = 0;
+  int _tab = 0;          // 0 = Capture (Notes/To-Do/À lire), 1 = Agenda, 2 = Carnet, 3 = Réglages
+  int _captureSub = 0;   // sous-onglet du hub Capture
 
   void _openCommand() {
     showGeneralDialog(
@@ -82,7 +83,11 @@ class _HomePageState extends State<HomePage> {
       barrierColor: Colors.black54,
       transitionDuration: const Duration(milliseconds: 300),
       pageBuilder: (_, _, _) => CommandPanel(
-        onOpenTab: (i) => setState(() => _tab = i),
+        // i = 0 Notes · 1 To-Do · 2 À lire → ouvre le hub Capture sur ce sous-onglet
+        onOpenTab: (i) => setState(() {
+          _tab = 0;
+          _captureSub = i;
+        }),
       ),
       transitionBuilder: (ctx, anim, _, child) {
         final curved = CurvedAnimation(parent: anim, curve: Curves.easeOutCubic);
@@ -101,9 +106,7 @@ class _HomePageState extends State<HomePage> {
       listenable: store,
       builder: (context, _) {
         final screens = [
-          const NotesScreen(),
-          const TodosScreen(),
-          const ReadingScreen(),
+          CaptureHub(sub: _captureSub),
           const AgendaScreen(),
           const CarnetScreen(),
           const SettingsScreen(),
@@ -146,10 +149,8 @@ class _HomePageState extends State<HomePage> {
             backgroundColor: const Color(0xFF111114),
             labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
             destinations: const [
-              NavigationDestination(icon: Icon(Icons.mic_none), label: 'Notes'),
-              NavigationDestination(icon: Icon(Icons.checklist), label: 'To-Do'),
               NavigationDestination(
-                  icon: Icon(Icons.bookmark_border), label: 'À lire'),
+                  icon: Icon(Icons.dynamic_feed), label: 'Capture'),
               NavigationDestination(
                   icon: Icon(Icons.event), label: 'Agenda'),
               NavigationDestination(
@@ -232,13 +233,12 @@ BoxDecoration get _card => BoxDecoration(
     );
 
 class NotesScreen extends StatelessWidget {
-  const NotesScreen({super.key});
+  final bool embedded;
+  const NotesScreen({super.key, this.embedded = false});
   @override
   Widget build(BuildContext context) {
     final notes = store.notes;
-    return _Page(
-      title: 'Notes',
-      child: notes.isEmpty
+    final body = notes.isEmpty
           ? const _Empty(Icons.mic_none, 'Aucune note',
               'Touche « Tap Back » puis Note pour créer une note.')
           : ListView.builder(
@@ -282,13 +282,14 @@ class NotesScreen extends StatelessWidget {
                   ),
                 );
               },
-            ),
-    );
+            );
+    return embedded ? body : _Page(title: 'Notes', child: body);
   }
 }
 
 class TodosScreen extends StatefulWidget {
-  const TodosScreen({super.key});
+  final bool embedded;
+  const TodosScreen({super.key, this.embedded = false});
   @override
   State<TodosScreen> createState() => _TodosScreenState();
 }
@@ -309,25 +310,23 @@ class _TodosScreenState extends State<TodosScreen> {
 
     final list = _showArchive ? done : active;
 
-    return _Page(
-      title: 'To-Do',
-      child: Column(
-        children: [
-          _segmented(active.length, done.length),
-          Expanded(
-            child: list.isEmpty
-                ? _emptyFor(_showArchive)
-                : ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
-                    itemCount: list.length,
-                    itemBuilder: (context, i) => _showArchive
-                        ? _archiveTile(list[i])
-                        : _activeTile(list[i]),
-                  ),
-          ),
-        ],
-      ),
+    final body = Column(
+      children: [
+        _segmented(active.length, done.length),
+        Expanded(
+          child: list.isEmpty
+              ? _emptyFor(_showArchive)
+              : ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
+                  itemCount: list.length,
+                  itemBuilder: (context, i) => _showArchive
+                      ? _archiveTile(list[i])
+                      : _activeTile(list[i]),
+                ),
+        ),
+      ],
     );
+    return widget.embedded ? body : _Page(title: 'To-Do', child: body);
   }
 
   Widget _segmented(int activeCount, int doneCount) {
@@ -457,13 +456,12 @@ class _TodosScreenState extends State<TodosScreen> {
 }
 
 class ReadingScreen extends StatelessWidget {
-  const ReadingScreen({super.key});
+  final bool embedded;
+  const ReadingScreen({super.key, this.embedded = false});
   @override
   Widget build(BuildContext context) {
     final items = store.reading;
-    return _Page(
-      title: 'À lire',
-      child: items.isEmpty
+    final body = items.isEmpty
           ? const _Empty(Icons.bookmark_border, 'Rien à lire pour l\'instant',
               'Touche « Tap Back » puis « À lire » pour garder un lien/texte et programmer un rappel.')
           : ListView.builder(
@@ -526,7 +524,75 @@ class ReadingScreen extends StatelessWidget {
                   ),
                 );
               },
-            ),
+            );
+    return embedded ? body : _Page(title: 'À lire', child: body);
+  }
+}
+
+// ============================================================
+// Hub Capture : Notes + To-Do + À lire, swipe gauche/droite
+// ============================================================
+
+class CaptureHub extends StatefulWidget {
+  final int sub; // 0 = Notes, 1 = To-Do, 2 = À lire
+  const CaptureHub({super.key, required this.sub});
+  @override
+  State<CaptureHub> createState() => _CaptureHubState();
+}
+
+class _CaptureHubState extends State<CaptureHub>
+    with SingleTickerProviderStateMixin {
+  late final TabController _c =
+      TabController(length: 3, vsync: this, initialIndex: widget.sub);
+
+  @override
+  void didUpdateWidget(CaptureHub old) {
+    super.didUpdateWidget(old);
+    if (widget.sub != old.sub && widget.sub != _c.index) {
+      _c.animateTo(widget.sub);
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        const SizedBox(height: 6),
+        TabBar(
+          controller: _c,
+          dividerColor: Colors.transparent,
+          indicatorSize: TabBarIndicatorSize.tab,
+          indicator: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          labelColor: Colors.white,
+          unselectedLabelColor: _textSecondary,
+          labelStyle:
+              const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+          tabs: const [
+            Tab(text: '🎙️ Notes'),
+            Tab(text: '✅ To-Do'),
+            Tab(text: '🔖 À lire'),
+          ],
+        ),
+        Expanded(
+          child: TabBarView(
+            controller: _c,
+            children: const [
+              NotesScreen(embedded: true),
+              TodosScreen(embedded: true),
+              ReadingScreen(embedded: true),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

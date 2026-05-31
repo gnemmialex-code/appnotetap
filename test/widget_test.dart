@@ -9,8 +9,8 @@ void main() {
     await tester.pumpWidget(const TapBackApp());
     await tester.pump();
 
-    // Le titre de l'écran Notes et le bouton flottant sont présents.
-    expect(find.text('Notes'), findsWidgets);
+    // L'onglet Capture (Notes/To-Do/À lire) et le bouton flottant sont présents.
+    expect(find.text('Capture'), findsWidgets);
     expect(find.text('Tap Back'), findsOneWidget);
   });
 

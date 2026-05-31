@@ -234,6 +234,36 @@ main::-webkit-scrollbar { width: 0; }
 
 .page-title { font-size: 34px; font-weight: 600; margin: 6px 4px 16px; letter-spacing: .01em; }
 
+/* Hub Capture : segment + volets swipeables */
+.cap-seg {
+  display: flex; gap: 6px;
+  padding: 2px; margin: 0 0 10px;
+  background: var(--surface);
+  border-radius: 14px;
+}
+.cap-seg-btn {
+  flex: 1; border: none; background: transparent; cursor: pointer;
+  color: var(--text2); font-family: inherit; font-size: 13px; font-weight: 600;
+  padding: 9px 4px; border-radius: 11px; white-space: nowrap;
+  transition: background .15s, color .15s;
+}
+.cap-seg-btn.on { background: #fff; color: #0a0a0c; }
+.cap-scroller {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y;
+}
+.cap-scroller::-webkit-scrollbar { display: none; }
+.cap-pane {
+  flex: 0 0 100%;
+  min-width: 100%;
+  scroll-snap-align: start;
+  padding-right: 2px;
+}
+
 /* Sélecteur À faire / Terminées (onglet To-Do) */
 .tabseg {
   display: flex;
@@ -403,10 +433,10 @@ main::-webkit-scrollbar { width: 0; }
   flex: 1; min-width: 0; background: none; border: none; cursor: pointer;
   color: var(--text3);
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 2px; font-size: 7.5px; font-weight: 500; padding: 0 1px;
+  gap: 2px; font-size: 9px; font-weight: 500; padding: 0 1px;
 }
 .tab span:last-child { white-space: nowrap; }
-.tab .ti { font-size: 16px; filter: grayscale(1) opacity(.6); }
+.tab .ti { font-size: 19px; filter: grayscale(1) opacity(.6); }
 .tab.active { color: #fff; }
 .tab.active .ti { filter: none; }
 

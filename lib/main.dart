@@ -6,7 +6,10 @@
 //
 // NB : sur iOS, la police par défaut est San Francisco (police système).
 
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import 'models.dart';
 import 'notifications.dart';
@@ -24,6 +27,7 @@ Future<void> main() async {
 // Palette
 const _bg = Color(0xFF000000);
 const _surface = Color(0x14FFFFFF);
+const _surfaceStrong = Color(0x1FFFFFFF);
 const _textSecondary = Color(0x8CFFFFFF);
 
 String _uid() => DateTime.now().microsecondsSinceEpoch.toRadixString(36);
@@ -100,6 +104,8 @@ class _HomePageState extends State<HomePage> {
           const NotesScreen(),
           const TodosScreen(),
           const ReadingScreen(),
+          const AgendaScreen(),
+          const CarnetScreen(),
         ];
         return Scaffold(
           body: SafeArea(bottom: false, child: screens[_tab]),
@@ -115,11 +121,16 @@ class _HomePageState extends State<HomePage> {
             selectedIndex: _tab,
             onDestinationSelected: (i) => setState(() => _tab = i),
             backgroundColor: const Color(0xFF111114),
+            labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
             destinations: const [
               NavigationDestination(icon: Icon(Icons.mic_none), label: 'Notes'),
               NavigationDestination(icon: Icon(Icons.checklist), label: 'To-Do'),
               NavigationDestination(
                   icon: Icon(Icons.bookmark_border), label: 'À lire'),
+              NavigationDestination(
+                  icon: Icon(Icons.event), label: 'Agenda'),
+              NavigationDestination(
+                  icon: Icon(Icons.menu_book), label: 'Carnet'),
             ],
           ),
         );
@@ -135,16 +146,25 @@ class _HomePageState extends State<HomePage> {
 class _Page extends StatelessWidget {
   final String title;
   final Widget child;
-  const _Page({required this.title, required this.child});
+  final Widget? trailing;
+  const _Page({required this.title, required this.child, this.trailing});
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
-          child: Text(title,
-              style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w700)),
+          padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(title,
+                    style: const TextStyle(
+                        fontSize: 32, fontWeight: FontWeight.w700)),
+              ),
+              ?trailing,
+            ],
+          ),
         ),
         Expanded(child: child),
       ],
@@ -482,6 +502,359 @@ class ReadingScreen extends StatelessWidget {
                 );
               },
             ),
+    );
+  }
+}
+
+// ============================================================
+// Agenda (événements locaux)
+// ============================================================
+
+class AgendaScreen extends StatelessWidget {
+  const AgendaScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final events = store.events; // déjà triés par date (store.addEvent)
+    return _Page(
+      title: 'Agenda',
+      trailing: IconButton(
+        icon: const Icon(Icons.add, color: Colors.white),
+        onPressed: () => _add(context),
+      ),
+      child: events.isEmpty
+          ? const _Empty(Icons.event, 'Aucun événement',
+              'Touche « + » pour ajouter un événement à ton agenda.')
+          : ListView.builder(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+              itemCount: events.length,
+              itemBuilder: (context, i) {
+                final ev = events[i];
+                final hm =
+                    '${ev.when.hour.toString().padLeft(2, '0')}:${ev.when.minute.toString().padLeft(2, '0')}';
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.all(12),
+                  decoration: _card,
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 52,
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        decoration: BoxDecoration(
+                            color: _surfaceStrong,
+                            borderRadius: BorderRadius.circular(12)),
+                        child: Column(
+                          children: [
+                            Text('${ev.when.day}',
+                                style: const TextStyle(
+                                    fontSize: 22, fontWeight: FontWeight.w700)),
+                            Text(_monthShort(ev.when.month),
+                                style: const TextStyle(
+                                    fontSize: 11, color: _textSecondary)),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(ev.title,
+                                style: const TextStyle(
+                                    fontSize: 16, fontWeight: FontWeight.w600)),
+                            Text('🕒 $hm${ev.note.isNotEmpty ? ' · ${ev.note}' : ''}',
+                                style: const TextStyle(
+                                    fontSize: 13, color: _textSecondary)),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, size: 20),
+                        color: _textSecondary,
+                        onPressed: () => store.deleteEvent(ev.id),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+    );
+  }
+
+  void _add(BuildContext context) {
+    final title = TextEditingController();
+    final note = TextEditingController();
+    DateTime when = DateTime.now().add(const Duration(hours: 1));
+    _showSheet(context, 'Nouvel événement', (setSheet) {
+      return [
+        _sheetField(title, 'Titre de l\'événement…'),
+        const SizedBox(height: 8),
+        _sheetField(note, 'Lieu / note (optionnel)…'),
+        const SizedBox(height: 8),
+        _DateTimeRow(
+          when: when,
+          onPick: (d) => setSheet(() => when = d),
+        ),
+        const SizedBox(height: 14),
+        _sheetPrimary('Ajouter à l\'agenda', () {
+          if (title.text.trim().isEmpty) return;
+          store.addEvent(CalEvent(
+            id: _uid(),
+            title: title.text.trim(),
+            when: when,
+            note: note.text.trim(),
+          ));
+          Navigator.of(context).pop();
+        }),
+      ];
+    });
+  }
+}
+
+// ============================================================
+// Carnet (notes détaillées : titre, note, date/heure, image)
+// ============================================================
+
+class CarnetScreen extends StatelessWidget {
+  const CarnetScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final items = store.carnet;
+    return _Page(
+      title: 'Carnet',
+      trailing: IconButton(
+        icon: const Icon(Icons.add, color: Colors.white),
+        onPressed: () => _add(context),
+      ),
+      child: items.isEmpty
+          ? const _Empty(Icons.menu_book, 'Carnet vide',
+              'Touche « + » pour créer une fiche : titre, note, date, heure, image.')
+          : ListView.builder(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+              itemCount: items.length,
+              itemBuilder: (context, i) {
+                final f = items[i];
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.all(14),
+                  decoration: _card,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(f.title,
+                                style: const TextStyle(
+                                    fontSize: 17, fontWeight: FontWeight.w600)),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline, size: 20),
+                            color: _textSecondary,
+                            onPressed: () => store.deleteCarnet(f.id),
+                          ),
+                        ],
+                      ),
+                      if (f.note.isNotEmpty)
+                        Text(f.note,
+                            style: const TextStyle(color: _textSecondary)),
+                      if (f.when != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text('🕒 ${formatStamp(f.when!)}',
+                              style: const TextStyle(
+                                  fontSize: 12, color: Colors.white38)),
+                        ),
+                      if (f.imageB64 != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 10),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.memory(
+                              base64Decode(f.imageB64!),
+                              height: 180,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
+            ),
+    );
+  }
+
+  void _add(BuildContext context) {
+    final title = TextEditingController();
+    final note = TextEditingController();
+    DateTime? when;
+    String? imageB64;
+    _showSheet(context, 'Nouvelle fiche', (setSheet) {
+      return [
+        _sheetField(title, 'Titre…'),
+        const SizedBox(height: 8),
+        _sheetField(note, 'Note détaillée…', maxLines: 4),
+        const SizedBox(height: 8),
+        _DateTimeRow(
+          when: when,
+          optional: true,
+          onPick: (d) => setSheet(() => when = d),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: Colors.white,
+            side: const BorderSide(color: Colors.white24),
+            minimumSize: const Size.fromHeight(48),
+          ),
+          icon: const Icon(Icons.image_outlined),
+          label: Text(imageB64 == null ? 'Ajouter une image' : 'Image ajoutée ✓'),
+          onPressed: () async {
+            final picked = await ImagePicker()
+                .pickImage(source: ImageSource.gallery, maxWidth: 1280, imageQuality: 80);
+            if (picked == null) return;
+            final bytes = await picked.readAsBytes();
+            setSheet(() => imageB64 = base64Encode(bytes));
+          },
+        ),
+        const SizedBox(height: 14),
+        _sheetPrimary('Enregistrer la fiche', () {
+          if (title.text.trim().isEmpty && note.text.trim().isEmpty) return;
+          store.addCarnet(CarnetEntry(
+            id: _uid(),
+            createdAt: DateTime.now(),
+            title: title.text.trim().isEmpty ? 'Fiche' : title.text.trim(),
+            note: note.text.trim(),
+            when: when,
+            imageB64: imageB64,
+          ));
+          Navigator.of(context).pop();
+        }),
+      ];
+    });
+  }
+}
+
+// --- Helpers partagés des feuilles d'ajout (Agenda / Carnet) ---
+
+String _monthShort(int m) {
+  const names = ['', 'janv', 'févr', 'mars', 'avr', 'mai', 'juin', 'juil',
+    'août', 'sept', 'oct', 'nov', 'déc'];
+  return names[m];
+}
+
+void _showSheet(BuildContext context, String title,
+    List<Widget> Function(void Function(VoidCallback)) body) {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: const Color(0xFF15151A),
+    shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+    builder: (ctx) => Padding(
+      padding: EdgeInsets.only(
+          left: 18, right: 18, top: 14,
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 22),
+      child: StatefulBuilder(
+        builder: (ctx, setSheet) => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 38, height: 5,
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(3)),
+              ),
+            ),
+            Text(title,
+                style: const TextStyle(
+                    fontSize: 18, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 12),
+            ...body(setSheet),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+Widget _sheetField(TextEditingController c, String hint, {int maxLines = 1}) {
+  return TextField(
+    controller: c,
+    maxLines: maxLines,
+    style: const TextStyle(color: Colors.white),
+    decoration: InputDecoration(
+      hintText: hint,
+      hintStyle: const TextStyle(color: Colors.white38),
+      filled: true,
+      fillColor: Colors.white10,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide.none,
+      ),
+    ),
+  );
+}
+
+Widget _sheetPrimary(String label, VoidCallback onTap) {
+  return ElevatedButton(
+    style: ElevatedButton.styleFrom(
+      backgroundColor: Colors.white,
+      foregroundColor: Colors.black,
+      minimumSize: const Size.fromHeight(50),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+    ),
+    onPressed: onTap,
+    child: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+  );
+}
+
+/// Ligne "choisir date + heure" utilisée dans les feuilles d'ajout.
+class _DateTimeRow extends StatelessWidget {
+  final DateTime? when;
+  final bool optional;
+  final ValueChanged<DateTime> onPick;
+  const _DateTimeRow({required this.when, required this.onPick, this.optional = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final label = when == null
+        ? (optional ? 'Date & heure (optionnel)' : 'Choisir date & heure')
+        : '${when!.day}/${when!.month}/${when!.year} à '
+            '${when!.hour.toString().padLeft(2, '0')}:${when!.minute.toString().padLeft(2, '0')}';
+    return OutlinedButton.icon(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: Colors.white,
+        side: const BorderSide(color: Colors.white24),
+        minimumSize: const Size.fromHeight(48),
+        alignment: Alignment.centerLeft,
+      ),
+      icon: const Icon(Icons.schedule),
+      label: Text(label),
+      onPressed: () async {
+        final now = DateTime.now();
+        final d = await showDatePicker(
+          context: context,
+          initialDate: when ?? now,
+          firstDate: now.subtract(const Duration(days: 1)),
+          lastDate: now.add(const Duration(days: 365 * 3)),
+        );
+        if (d == null || !context.mounted) return;
+        final t = await showTimePicker(
+          context: context,
+          initialTime: TimeOfDay.fromDateTime(when ?? now),
+        );
+        if (t == null) return;
+        onPick(DateTime(d.year, d.month, d.day, t.hour, t.minute));
+      },
     );
   }
 }

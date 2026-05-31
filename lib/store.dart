@@ -10,10 +10,14 @@ class Store extends ChangeNotifier {
   static const _kNotes = 'tbc_notes';
   static const _kTodos = 'tbc_todos';
   static const _kReading = 'tbc_reading';
+  static const _kEvents = 'tbc_events';
+  static const _kCarnet = 'tbc_carnet';
 
   final List<Note> notes = [];
   final List<Todo> todos = [];
   final List<ReadItem> reading = [];
+  final List<CalEvent> events = [];
+  final List<CarnetEntry> carnet = [];
 
   bool _loaded = false;
   bool get loaded => _loaded;
@@ -29,6 +33,12 @@ class Store extends ChangeNotifier {
     reading
       ..clear()
       ..addAll(_decodeList(prefs.getString(_kReading), ReadItem.fromJson));
+    events
+      ..clear()
+      ..addAll(_decodeList(prefs.getString(_kEvents), CalEvent.fromJson));
+    carnet
+      ..clear()
+      ..addAll(_decodeList(prefs.getString(_kCarnet), CarnetEntry.fromJson));
     _loaded = true;
     notifyListeners();
   }
@@ -96,5 +106,32 @@ class Store extends ChangeNotifier {
     reading.removeWhere((e) => e.id == id);
     notifyListeners();
     await _save(_kReading, reading);
+  }
+
+  // --- Agenda ---
+  Future<void> addEvent(CalEvent e) async {
+    events.add(e);
+    events.sort((a, b) => a.when.compareTo(b.when));
+    notifyListeners();
+    await _save(_kEvents, events);
+  }
+
+  Future<void> deleteEvent(String id) async {
+    events.removeWhere((e) => e.id == id);
+    notifyListeners();
+    await _save(_kEvents, events);
+  }
+
+  // --- Carnet ---
+  Future<void> addCarnet(CarnetEntry c) async {
+    carnet.insert(0, c);
+    notifyListeners();
+    await _save(_kCarnet, carnet);
+  }
+
+  Future<void> deleteCarnet(String id) async {
+    carnet.removeWhere((e) => e.id == id);
+    notifyListeners();
+    await _save(_kCarnet, carnet);
   }
 }

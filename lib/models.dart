@@ -71,6 +71,74 @@ class Todo {
       );
 }
 
+/// Événement d'agenda (local).
+class CalEvent {
+  final String id;
+  String title;
+  DateTime when;
+  String note;
+
+  CalEvent({
+    required this.id,
+    required this.title,
+    required this.when,
+    this.note = '',
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'when': when.toIso8601String(),
+        'note': note,
+      };
+
+  factory CalEvent.fromJson(Map<String, dynamic> j) => CalEvent(
+        id: j['id'] as String,
+        title: j['title'] as String? ?? '',
+        when: DateTime.parse(j['when'] as String),
+        note: j['note'] as String? ?? '',
+      );
+}
+
+/// Fiche du Carnet : note détaillée avec date/heure et image optionnelles.
+class CarnetEntry {
+  final String id;
+  final DateTime createdAt;
+  String title;
+  String note;
+  DateTime? when;
+  String? imageB64; // image encodée en base64 (JPEG)
+
+  CarnetEntry({
+    required this.id,
+    required this.createdAt,
+    required this.title,
+    this.note = '',
+    this.when,
+    this.imageB64,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'createdAt': createdAt.toIso8601String(),
+        'title': title,
+        'note': note,
+        'when': when?.toIso8601String(),
+        'imageB64': imageB64,
+      };
+
+  factory CarnetEntry.fromJson(Map<String, dynamic> j) => CarnetEntry(
+        id: j['id'] as String,
+        createdAt: DateTime.parse(j['createdAt'] as String),
+        title: j['title'] as String? ?? '',
+        note: j['note'] as String? ?? '',
+        when: (j['when'] as String?) != null
+            ? DateTime.parse(j['when'] as String)
+            : null,
+        imageB64: j['imageB64'] as String?,
+      );
+}
+
 /// Élément « À lire plus tard » : un lien ou un texte, avec rappel optionnel.
 class ReadItem {
   final String id;

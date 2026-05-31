@@ -6,6 +6,16 @@
 	<true/>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>TapBack Note utilise vos photos pour illustrer vos fiches du Carnet.</string>
+	<!-- Accès au Calendrier (section Agenda) -->
+	<key>NSCalendarsUsageDescription</key>
+	<string>TapBack Note accède à votre calendrier pour afficher et créer vos événements depuis l'Agenda.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>TapBack Note accède à votre calendrier pour afficher et créer vos événements depuis l'Agenda.</string>
+	<!-- Accès aux Rappels (section Rappels) -->
+	<key>NSRemindersUsageDescription</key>
+	<string>TapBack Note accède à l'app Rappels pour synchroniser vos rappels.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>TapBack Note accède à l'app Rappels pour synchroniser vos rappels.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

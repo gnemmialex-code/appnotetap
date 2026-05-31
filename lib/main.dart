@@ -108,14 +108,36 @@ class _HomePageState extends State<HomePage> {
           const CarnetScreen(),
         ];
         return Scaffold(
-          body: SafeArea(bottom: false, child: screens[_tab]),
-          floatingActionButton: FloatingActionButton.extended(
-            onPressed: _openCommand,
-            backgroundColor: Colors.white,
-            foregroundColor: Colors.black,
-            icon: const Icon(Icons.bolt),
-            label: const Text('Tap Back',
-                style: TextStyle(fontWeight: FontWeight.w700)),
+          body: SafeArea(
+            bottom: false,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, anim) => FadeTransition(
+                opacity: anim,
+                child: SlideTransition(
+                  position: Tween<Offset>(
+                          begin: const Offset(0.05, 0), end: Offset.zero)
+                      .animate(anim),
+                  child: child,
+                ),
+              ),
+              child: KeyedSubtree(
+                key: ValueKey(_tab),
+                child: screens[_tab],
+              ),
+            ),
+          ),
+          floatingActionButton: PressPop(
+            child: FloatingActionButton.extended(
+              onPressed: _openCommand,
+              backgroundColor: Colors.white,
+              foregroundColor: Colors.black,
+              icon: const Icon(Icons.bolt),
+              label: const Text('Tap Back',
+                  style: TextStyle(fontWeight: FontWeight.w700)),
+            ),
           ),
           bottomNavigationBar: NavigationBar(
             selectedIndex: _tab,
@@ -518,9 +540,11 @@ class AgendaScreen extends StatelessWidget {
     final events = store.events; // déjà triés par date (store.addEvent)
     return _Page(
       title: 'Agenda',
-      trailing: IconButton(
-        icon: const Icon(Icons.add, color: Colors.white),
-        onPressed: () => _add(context),
+      trailing: PressPop(
+        child: IconButton(
+          icon: const Icon(Icons.add, color: Colors.white),
+          onPressed: () => _add(context),
+        ),
       ),
       child: events.isEmpty
           ? const _Empty(Icons.event, 'Aucun événement',
@@ -624,9 +648,11 @@ class CarnetScreen extends StatelessWidget {
     final items = store.carnet;
     return _Page(
       title: 'Carnet',
-      trailing: IconButton(
-        icon: const Icon(Icons.add, color: Colors.white),
-        onPressed: () => _add(context),
+      trailing: PressPop(
+        child: IconButton(
+          icon: const Icon(Icons.add, color: Colors.white),
+          onPressed: () => _add(context),
+        ),
       ),
       child: items.isEmpty
           ? const _Empty(Icons.menu_book, 'Carnet vide',
@@ -705,21 +731,23 @@ class CarnetScreen extends StatelessWidget {
           onPick: (d) => setSheet(() => when = d),
         ),
         const SizedBox(height: 8),
-        OutlinedButton.icon(
-          style: OutlinedButton.styleFrom(
-            foregroundColor: Colors.white,
-            side: const BorderSide(color: Colors.white24),
-            minimumSize: const Size.fromHeight(48),
+        PressPop(
+          child: OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.white,
+              side: const BorderSide(color: Colors.white24),
+              minimumSize: const Size.fromHeight(48),
+            ),
+            icon: const Icon(Icons.image_outlined),
+            label: Text(imageB64 == null ? 'Ajouter une image' : 'Image ajoutée ✓'),
+            onPressed: () async {
+              final picked = await ImagePicker().pickImage(
+                  source: ImageSource.gallery, maxWidth: 1280, imageQuality: 80);
+              if (picked == null) return;
+              final bytes = await picked.readAsBytes();
+              setSheet(() => imageB64 = base64Encode(bytes));
+            },
           ),
-          icon: const Icon(Icons.image_outlined),
-          label: Text(imageB64 == null ? 'Ajouter une image' : 'Image ajoutée ✓'),
-          onPressed: () async {
-            final picked = await ImagePicker()
-                .pickImage(source: ImageSource.gallery, maxWidth: 1280, imageQuality: 80);
-            if (picked == null) return;
-            final bytes = await picked.readAsBytes();
-            setSheet(() => imageB64 = base64Encode(bytes));
-          },
         ),
         const SizedBox(height: 14),
         _sheetPrimary('Enregistrer la fiche', () {
@@ -805,15 +833,17 @@ Widget _sheetField(TextEditingController c, String hint, {int maxLines = 1}) {
 }
 
 Widget _sheetPrimary(String label, VoidCallback onTap) {
-  return ElevatedButton(
-    style: ElevatedButton.styleFrom(
-      backgroundColor: Colors.white,
-      foregroundColor: Colors.black,
-      minimumSize: const Size.fromHeight(50),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+  return PressPop(
+    child: ElevatedButton(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        minimumSize: const Size.fromHeight(50),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      ),
+      onPressed: onTap,
+      child: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
     ),
-    onPressed: onTap,
-    child: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
   );
 }
 
@@ -830,7 +860,8 @@ class _DateTimeRow extends StatelessWidget {
         ? (optional ? 'Date & heure (optionnel)' : 'Choisir date & heure')
         : '${when!.day}/${when!.month}/${when!.year} à '
             '${when!.hour.toString().padLeft(2, '0')}:${when!.minute.toString().padLeft(2, '0')}';
-    return OutlinedButton.icon(
+    return PressPop(
+      child: OutlinedButton.icon(
       style: OutlinedButton.styleFrom(
         foregroundColor: Colors.white,
         side: const BorderSide(color: Colors.white24),
@@ -855,6 +886,7 @@ class _DateTimeRow extends StatelessWidget {
         if (t == null) return;
         onPick(DateTime(d.year, d.month, d.day, t.hour, t.minute));
       },
+      ),
     );
   }
 }
@@ -1271,6 +1303,34 @@ class _CommandPanelState extends State<CommandPanel> {
           textAlign: TextAlign.center,
           style: const TextStyle(
               color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16)),
+    );
+  }
+}
+
+/// Enveloppe n'importe quel bouton/élément tappable d'un effet « pop »
+/// (léger rétrécissement) à l'appui, sans intercepter le geste du child.
+class PressPop extends StatefulWidget {
+  final Widget child;
+  const PressPop({super.key, required this.child});
+  @override
+  State<PressPop> createState() => _PressPopState();
+}
+
+class _PressPopState extends State<PressPop> {
+  double _scale = 1;
+  void _set(double v) => setState(() => _scale = v);
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      onPointerDown: (_) => _set(0.9),
+      onPointerUp: (_) => _set(1),
+      onPointerCancel: (_) => _set(1),
+      child: AnimatedScale(
+        scale: _scale,
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOut,
+        child: widget.child,
+      ),
     );
   }
 }

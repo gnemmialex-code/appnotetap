@@ -77,7 +77,7 @@ class _HomePageState extends State<HomePage> {
       barrierColor: Colors.black54,
       transitionDuration: const Duration(milliseconds: 300),
       pageBuilder: (_, _, _) => CommandPanel(
-        onViewNotes: () => setState(() => _tab = 0),
+        onOpenTab: (i) => setState(() => _tab = i),
       ),
       transitionBuilder: (ctx, anim, _, child) {
         final curved = CurvedAnimation(parent: anim, curve: Curves.easeOutCubic);
@@ -240,54 +240,171 @@ class NotesScreen extends StatelessWidget {
   }
 }
 
-class TodosScreen extends StatelessWidget {
+class TodosScreen extends StatefulWidget {
   const TodosScreen({super.key});
   @override
+  State<TodosScreen> createState() => _TodosScreenState();
+}
+
+class _TodosScreenState extends State<TodosScreen> {
+  bool _showArchive = false;
+
+  @override
   Widget build(BuildContext context) {
-    final todos = store.todos;
+    final all = store.todos;
+    // Liste active : tâches non terminées + terminées depuis moins de 24 h.
+    final active = all.where((t) => !t.archived).toList();
+    // Archive : toutes les tâches terminées (conservées avec leurs dates),
+    // triées par date de réalisation décroissante.
+    final done = all.where((t) => t.done).toList()
+      ..sort((a, b) =>
+          (b.doneAt ?? b.createdAt).compareTo(a.doneAt ?? a.createdAt));
+
+    final list = _showArchive ? done : active;
+
     return _Page(
       title: 'To-Do',
-      child: todos.isEmpty
-          ? const _Empty(Icons.checklist, 'Aucune tâche',
-              'Touche « Tap Back » puis To-Do pour ajouter une tâche.')
-          : ListView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
-              itemCount: todos.length,
-              itemBuilder: (context, i) {
-                final t = todos[i];
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: _card,
-                  child: Row(
-                    children: [
-                      IconButton(
-                        icon: Icon(t.done
-                            ? Icons.check_circle
-                            : Icons.radio_button_unchecked),
-                        color: t.done ? Colors.green : _textSecondary,
-                        onPressed: () => store.toggleTodo(t.id),
-                      ),
-                      Expanded(
-                        child: Text(
-                          t.text,
-                          style: TextStyle(
-                            decoration:
-                                t.done ? TextDecoration.lineThrough : null,
-                            color: t.done ? Colors.white38 : Colors.white,
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline, size: 20),
-                        color: _textSecondary,
-                        onPressed: () => store.deleteTodo(t.id),
-                      ),
-                    ],
+      child: Column(
+        children: [
+          _segmented(active.length, done.length),
+          Expanded(
+            child: list.isEmpty
+                ? _emptyFor(_showArchive)
+                : ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
+                    itemCount: list.length,
+                    itemBuilder: (context, i) => _showArchive
+                        ? _archiveTile(list[i])
+                        : _activeTile(list[i]),
                   ),
-                );
-              },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _segmented(int activeCount, int doneCount) {
+    Widget seg(String label, bool selected, VoidCallback onTap) {
+      return Expanded(
+        child: GestureDetector(
+          onTap: onTap,
+          child: Container(
+            margin: const EdgeInsets.all(3),
+            padding: const EdgeInsets.symmetric(vertical: 9),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: selected ? Colors.white : Colors.transparent,
+              borderRadius: BorderRadius.circular(11),
             ),
+            child: Text(label,
+                style: TextStyle(
+                    color: selected ? Colors.black : _textSecondary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14)),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      decoration: BoxDecoration(
+          color: _surface, borderRadius: BorderRadius.circular(14)),
+      child: Row(
+        children: [
+          seg('À faire ($activeCount)', !_showArchive,
+              () => setState(() => _showArchive = false)),
+          seg('Terminées ($doneCount)', _showArchive,
+              () => setState(() => _showArchive = true)),
+        ],
+      ),
+    );
+  }
+
+  Widget _emptyFor(bool archive) => archive
+      ? const _Empty(Icons.history, 'Aucune tâche terminée',
+          'Les tâches cochées « Fait » sont conservées ici avec leurs dates.')
+      : const _Empty(Icons.checklist, 'Aucune tâche',
+          'Touche « Tap Back » puis To-Do pour ajouter une tâche.');
+
+  Widget _activeTile(Todo t) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: _card,
+      child: Row(
+        children: [
+          IconButton(
+            icon: Icon(
+                t.done ? Icons.check_circle : Icons.radio_button_unchecked),
+            color: t.done ? Colors.green : _textSecondary,
+            onPressed: () => store.toggleTodo(t.id),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  t.text,
+                  style: TextStyle(
+                    decoration: t.done ? TextDecoration.lineThrough : null,
+                    color: t.done ? Colors.white38 : Colors.white,
+                  ),
+                ),
+                if (t.done)
+                  const Text('Fait · retiré de la liste dans 24 h',
+                      style: TextStyle(fontSize: 11, color: Colors.white38)),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline, size: 20),
+            color: _textSecondary,
+            onPressed: () => store.deleteTodo(t.id),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _archiveTile(Todo t) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: _card,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(top: 2, right: 10),
+            child: Icon(Icons.check_circle, color: Colors.green, size: 20),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(t.text,
+                    style: const TextStyle(
+                        color: Colors.white70,
+                        decoration: TextDecoration.lineThrough)),
+                const SizedBox(height: 4),
+                Text('Créée : ${formatStamp(t.createdAt)}',
+                    style:
+                        const TextStyle(fontSize: 12, color: Colors.white38)),
+                if (t.doneAt != null)
+                  Text('Faite : ${formatStamp(t.doneAt!)}',
+                      style: const TextStyle(
+                          fontSize: 12, color: Colors.greenAccent)),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline, size: 20),
+            color: _textSecondary,
+            onPressed: () => store.deleteTodo(t.id),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -352,8 +469,9 @@ class SearchesScreen extends StatelessWidget {
 enum _Mode { choices, note, todo, search }
 
 class CommandPanel extends StatefulWidget {
-  final VoidCallback onViewNotes;
-  const CommandPanel({super.key, required this.onViewNotes});
+  /// Ouvre l'app sur un onglet (0 = Notes, 1 = To-Do, 2 = Recherches).
+  final void Function(int index) onOpenTab;
+  const CommandPanel({super.key, required this.onOpenTab});
   @override
   State<CommandPanel> createState() => _CommandPanelState();
 }
@@ -438,10 +556,23 @@ class _CommandPanelState extends State<CommandPanel> {
           ],
         ),
         const SizedBox(height: 8),
-        _cmdWide(Icons.menu_book, 'Voir les notes', () {
-          widget.onViewNotes();
-          _close();
-        }),
+        Row(
+          children: [
+            Expanded(
+              child: _cmdWide(Icons.menu_book, 'Voir les notes', () {
+                widget.onOpenTab(0);
+                _close();
+              }),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _cmdWide(Icons.checklist, 'Voir To-Do', () {
+                widget.onOpenTab(1);
+                _close();
+              }),
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -529,7 +660,7 @@ class _CommandPanelState extends State<CommandPanel> {
             title: title.isEmpty ? 'Note' : title,
             body: body,
           ));
-          widget.onViewNotes();
+          widget.onOpenTab(0);
           _close();
         }),
       ],

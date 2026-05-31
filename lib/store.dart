@@ -67,6 +67,7 @@ class Store extends ChangeNotifier {
   Future<void> toggleTodo(String id) async {
     final t = todos.firstWhere((e) => e.id == id);
     t.done = !t.done;
+    t.doneAt = t.done ? DateTime.now() : null;
     notifyListeners();
     await _save(_kTodos, todos);
   }

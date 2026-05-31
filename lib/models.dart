@@ -37,19 +37,27 @@ class Todo {
   final DateTime createdAt;
   String text;
   bool done;
+  DateTime? doneAt; // date à laquelle la tâche a été marquée « Fait »
 
   Todo({
     required this.id,
     required this.createdAt,
     required this.text,
     this.done = false,
+    this.doneAt,
   });
+
+  /// Vrai si la tâche est terminée depuis plus de 24 h
+  /// (donc à retirer de la liste active mais à conserver dans l'archive).
+  bool get archived =>
+      done && doneAt != null && DateTime.now().difference(doneAt!).inHours >= 24;
 
   Map<String, dynamic> toJson() => {
         'id': id,
         'createdAt': createdAt.toIso8601String(),
         'text': text,
         'done': done,
+        'doneAt': doneAt?.toIso8601String(),
       };
 
   factory Todo.fromJson(Map<String, dynamic> j) => Todo(
@@ -57,6 +65,9 @@ class Todo {
         createdAt: DateTime.parse(j['createdAt'] as String),
         text: j['text'] as String? ?? '',
         done: j['done'] as bool? ?? false,
+        doneAt: (j['doneAt'] as String?) != null
+            ? DateTime.parse(j['doneAt'] as String)
+            : null,
       );
 }
 

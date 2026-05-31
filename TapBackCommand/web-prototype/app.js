@@ -28,6 +28,7 @@
     reminders: Store.get("reminders", []),
     calevents: Store.get("calevents", []),
     carnet: Store.get("carnet", []),
+    profile: Store.get("profile", { name: "", email: "", avatar: null }),
   };
 
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -117,6 +118,7 @@
     if (State.tab === "reminders") renderReminders();
     if (State.tab === "calendar") renderCalendar();
     if (State.tab === "carnet") renderCarnet();
+    if (State.tab === "settings") renderSettings();
   }
 
   function emptyState(ico, title, msg) {
@@ -912,6 +914,82 @@
       c.appendChild(del);
       content.appendChild(c);
     });
+  }
+
+  // ----- Réglages : profil + documents obligatoires -----
+  const LEGAL_DOCS = [
+    { t: "Conditions générales d'utilisation (CGU)", b: "Texte des CGU à compléter avant publication. En acceptant, l'utilisateur accepte les conditions d'utilisation de TapBack Note." },
+    { t: "Politique de confidentialité", b: "Décrit les données collectées (profil, contenu local), leur usage et les droits de l'utilisateur. OBLIGATOIRE pour l'App Store." },
+    { t: "Mentions légales", b: "Éditeur de l'app, contact, hébergeur. À compléter." },
+    { t: "Contrat de licence (EULA Apple)", b: "Par défaut, Apple applique son EULA standard (Licensed Application End User License Agreement). Tu peux le remplacer par le tien." },
+    { t: "Règles de l'App Store", b: "L'app respecte les Directives de l'App Store : paiements via achats intégrés, pas de contenu interdit, confidentialité, etc." },
+    { t: "Gestion des données / Supprimer mon compte", b: "Apple impose la suppression de compte si l'app permet d'en créer un. Bouton de suppression + effacement des données local." },
+    { t: "Licences open-source", b: "Liste des bibliothèques tierces et de leurs licences." },
+  ];
+
+  function renderSettings() {
+    content.innerHTML = "";
+    content.appendChild(el("div", "page-title", "Réglages"));
+    const p = State.profile;
+
+    // --- Carte profil ---
+    const card = el("div", "card");
+    const avatarSrc = p.avatar
+      ? `<img src="${p.avatar}" class="avatar-img">`
+      : `<div class="avatar-ph">${(p.name || "?").trim().charAt(0).toUpperCase() || "?"}</div>`;
+    card.innerHTML = `
+      <div class="profile-head">
+        <label class="avatar-wrap" title="Changer la photo">
+          ${avatarSrc}
+          <span class="avatar-edit">✎</span>
+          <input type="file" id="avatarInput" accept="image/*" style="display:none">
+        </label>
+      </div>
+      <label class="set-label">Prénom / pseudo</label>
+      <input class="field" id="profName" placeholder="Ton prénom ou pseudo…" value="${esc(p.name)}">
+      <label class="set-label">E-mail</label>
+      <input class="field" id="profEmail" type="email" placeholder="ton@mail.com" value="${esc(p.email)}">
+      <button class="btn btn-primary" id="profSave" style="margin-top:12px">Enregistrer</button>
+      <div class="set-note">📧 Dans la vraie app, l'e-mail sera relié à ta connexion (Sign in with Apple).</div>`;
+    content.appendChild(card);
+
+    $("#avatarInput", card).onchange = (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      const rd = new FileReader();
+      rd.onload = () => {
+        State.profile.avatar = rd.result;
+        try { Store.set("profile", State.profile); } catch { alert("Image trop lourde pour la démo."); }
+        render();
+      };
+      rd.readAsDataURL(f);
+    };
+    $("#profSave", card).onclick = () => {
+      State.profile.name = $("#profName", card).value.trim();
+      State.profile.email = $("#profEmail", card).value.trim();
+      Store.set("profile", State.profile);
+      haptic();
+      const note = el("div", "set-saved", "✓ Profil enregistré");
+      card.appendChild(note);
+      setTimeout(() => note.remove(), 1800);
+    };
+
+    // --- Documents obligatoires ---
+    content.appendChild(el("div", "section-label", "Informations & documents"));
+    LEGAL_DOCS.forEach(doc => {
+      const row = el("div", "legal-row");
+      row.innerHTML = `<div class="legal-top"><span>${esc(doc.t)}</span><span class="legal-arrow">▾</span></div><div class="legal-body">${esc(doc.b)}</div>`;
+      row.querySelector(".legal-top").onclick = () => {
+        row.classList.toggle("open");
+        haptic();
+      };
+      content.appendChild(row);
+    });
+
+    const ver = el("div", "set-note");
+    ver.style.textAlign = "center";
+    ver.style.marginTop = "10px";
+    ver.textContent = "TapBack Note — v1.0.0 (démo)";
+    content.appendChild(ver);
   }
 
   // ---------- Haptics (vibration where supported) ----------

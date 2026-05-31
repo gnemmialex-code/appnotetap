@@ -106,6 +106,7 @@ class _HomePageState extends State<HomePage> {
           const ReadingScreen(),
           const AgendaScreen(),
           const CarnetScreen(),
+          const SettingsScreen(),
         ];
         return Scaffold(
           body: SafeArea(
@@ -153,6 +154,8 @@ class _HomePageState extends State<HomePage> {
                   icon: Icon(Icons.event), label: 'Agenda'),
               NavigationDestination(
                   icon: Icon(Icons.menu_book), label: 'Carnet'),
+              NavigationDestination(
+                  icon: Icon(Icons.settings_outlined), label: 'Réglages'),
             ],
           ),
         );
@@ -764,6 +767,211 @@ class CarnetScreen extends StatelessWidget {
         }),
       ];
     });
+  }
+}
+
+// ============================================================
+// Réglages (profil + documents obligatoires)
+// ============================================================
+
+const _legalDocs = <(String, String)>[
+  ('Conditions générales d\'utilisation (CGU)',
+      'Texte des CGU à compléter avant publication. En utilisant TapBack Note, l\'utilisateur accepte ces conditions.'),
+  ('Politique de confidentialité',
+      'Décrit les données collectées (profil, contenu local), leur usage et les droits de l\'utilisateur. OBLIGATOIRE pour l\'App Store.'),
+  ('Mentions légales',
+      'Éditeur de l\'app, contact, hébergeur. À compléter.'),
+  ('Contrat de licence (EULA Apple)',
+      'Par défaut, Apple applique son EULA standard. Tu peux le remplacer par le tien.'),
+  ('Règles de l\'App Store',
+      'L\'app respecte les Directives de l\'App Store : paiements via achats intégrés, confidentialité, contenu autorisé, etc.'),
+  ('Gestion des données / Supprimer mon compte',
+      'Apple impose la suppression de compte si l\'app permet d\'en créer un, avec effacement des données.'),
+  ('Licences open-source',
+      'Liste des bibliothèques tierces et de leurs licences.'),
+];
+
+class SettingsScreen extends StatefulWidget {
+  const SettingsScreen({super.key});
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  late final TextEditingController _name =
+      TextEditingController(text: store.profileName);
+  late final TextEditingController _email =
+      TextEditingController(text: store.profileEmail);
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _email.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickAvatar() async {
+    final picked = await ImagePicker()
+        .pickImage(source: ImageSource.gallery, maxWidth: 512, imageQuality: 80);
+    if (picked == null) return;
+    final bytes = await picked.readAsBytes();
+    await store.saveProfile(avatarB64: base64Encode(bytes));
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final initial =
+        (store.profileName.trim().isNotEmpty ? store.profileName.trim()[0] : '?')
+            .toUpperCase();
+    return _Page(
+      title: 'Réglages',
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+        children: [
+          // --- Carte profil ---
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: _card,
+            child: Column(
+              children: [
+                Center(
+                  child: PressPop(
+                    child: GestureDetector(
+                      onTap: _pickAvatar,
+                      child: Stack(
+                        children: [
+                          ClipOval(
+                            child: store.profileAvatarB64 != null
+                                ? Image.memory(
+                                    base64Decode(store.profileAvatarB64!),
+                                    width: 84, height: 84, fit: BoxFit.cover)
+                                : Container(
+                                    width: 84,
+                                    height: 84,
+                                    color: _surfaceStrong,
+                                    alignment: Alignment.center,
+                                    child: Text(initial,
+                                        style: const TextStyle(
+                                            fontSize: 34,
+                                            fontWeight: FontWeight.w700)),
+                                  ),
+                          ),
+                          Positioned(
+                            right: 0,
+                            bottom: 0,
+                            child: Container(
+                              width: 28,
+                              height: 28,
+                              decoration: const BoxDecoration(
+                                  color: Colors.white, shape: BoxShape.circle),
+                              child: const Icon(Icons.edit,
+                                  size: 15, color: Colors.black),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _settingsField(_name, 'Prénom / pseudo'),
+                const SizedBox(height: 8),
+                _settingsField(_email, 'E-mail',
+                    keyboard: TextInputType.emailAddress),
+                const SizedBox(height: 12),
+                PressPop(
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                      minimumSize: const Size.fromHeight(48),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                    ),
+                    onPressed: () async {
+                      await store.saveProfile(
+                          name: _name.text.trim(), email: _email.text.trim());
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Profil enregistré ✓')),
+                      );
+                    },
+                    child: const Text('Enregistrer',
+                        style: TextStyle(fontWeight: FontWeight.w700)),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  '📧 Dans la vraie app, l\'e-mail sera relié à ta connexion (Sign in with Apple).',
+                  style: TextStyle(fontSize: 12, color: _textSecondary),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(4, 0, 4, 8),
+            child: Text('Informations & documents',
+                style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: _textSecondary)),
+          ),
+          // --- Documents obligatoires ---
+          ..._legalDocs.map((d) => Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: _card,
+                clipBehavior: Clip.antiAlias,
+                child: Theme(
+                  data: Theme.of(context)
+                      .copyWith(dividerColor: Colors.transparent),
+                  child: ExpansionTile(
+                    iconColor: Colors.white,
+                    collapsedIconColor: _textSecondary,
+                    title: Text(d.$1,
+                        style: const TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w500)),
+                    childrenPadding:
+                        const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                    expandedCrossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(d.$2,
+                          style: const TextStyle(
+                              color: _textSecondary, height: 1.5)),
+                    ],
+                  ),
+                ),
+              )),
+          const SizedBox(height: 10),
+          const Center(
+            child: Text('TapBack Note — v1.0.0',
+                style: TextStyle(fontSize: 12, color: Colors.white38)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _settingsField(TextEditingController c, String hint,
+      {TextInputType? keyboard}) {
+    return TextField(
+      controller: c,
+      keyboardType: keyboard,
+      style: const TextStyle(color: Colors.white),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: const TextStyle(color: Colors.white38),
+        filled: true,
+        fillColor: Colors.white10,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+      ),
+    );
   }
 }
 

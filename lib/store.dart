@@ -12,12 +12,18 @@ class Store extends ChangeNotifier {
   static const _kReading = 'tbc_reading';
   static const _kEvents = 'tbc_events';
   static const _kCarnet = 'tbc_carnet';
+  static const _kProfile = 'tbc_profile';
 
   final List<Note> notes = [];
   final List<Todo> todos = [];
   final List<ReadItem> reading = [];
   final List<CalEvent> events = [];
   final List<CarnetEntry> carnet = [];
+
+  // Profil utilisateur
+  String profileName = '';
+  String profileEmail = '';
+  String? profileAvatarB64;
 
   bool _loaded = false;
   bool get loaded => _loaded;
@@ -39,6 +45,13 @@ class Store extends ChangeNotifier {
     carnet
       ..clear()
       ..addAll(_decodeList(prefs.getString(_kCarnet), CarnetEntry.fromJson));
+    final pr = prefs.getString(_kProfile);
+    if (pr != null && pr.isNotEmpty) {
+      final m = jsonDecode(pr) as Map<String, dynamic>;
+      profileName = m['name'] as String? ?? '';
+      profileEmail = m['email'] as String? ?? '';
+      profileAvatarB64 = m['avatar'] as String?;
+    }
     _loaded = true;
     notifyListeners();
   }
@@ -133,5 +146,22 @@ class Store extends ChangeNotifier {
     carnet.removeWhere((e) => e.id == id);
     notifyListeners();
     await _save(_kCarnet, carnet);
+  }
+
+  // --- Profil ---
+  Future<void> saveProfile(
+      {String? name, String? email, String? avatarB64}) async {
+    if (name != null) profileName = name;
+    if (email != null) profileEmail = email;
+    if (avatarB64 != null) profileAvatarB64 = avatarB64;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+        _kProfile,
+        jsonEncode({
+          'name': profileName,
+          'email': profileEmail,
+          'avatar': profileAvatarB64,
+        }));
   }
 }

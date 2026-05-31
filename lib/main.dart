@@ -509,15 +509,17 @@ class _CommandPanelState extends State<CommandPanel> {
 
   // « À lire » : un ou plusieurs champs + choix de rappel.
   final List<TextEditingController> _readControllers = [TextEditingController()];
-  String _remindKey = 'none';
+  String _remindKey = ''; // '' = aucun rappel (par défaut)
+  DateTime? _customDateTime;
 
   static const _remindOptions = [
-    ('none', 'Aucun'),
     ('1h', 'Dans 1 h'),
     ('eve', 'Ce soir 20h'),
     ('tom', 'Demain 9h'),
     ('3d', 'Dans 3 j'),
   ];
+
+  String _two(int n) => n.toString().padLeft(2, '0');
 
   @override
   void dispose() {
@@ -757,10 +759,10 @@ class _CommandPanelState extends State<CommandPanel> {
   }
 
   List<Widget> _remindChips() {
-    return _remindOptions.map((o) {
-      final on = _remindKey == o.$1;
+    Widget chip(String key, String label, VoidCallback onTap) {
+      final on = _remindKey == key;
       return GestureDetector(
-        onTap: () => setState(() => _remindKey = o.$1),
+        onTap: onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
@@ -769,14 +771,44 @@ class _CommandPanelState extends State<CommandPanel> {
                 color: on ? const Color(0xFF0A0A0C) : Colors.black12),
             borderRadius: BorderRadius.circular(11),
           ),
-          child: Text(o.$2,
+          child: Text(label,
               style: TextStyle(
                   color: on ? Colors.white : Colors.black,
                   fontWeight: FontWeight.w600,
                   fontSize: 13)),
         ),
       );
-    }).toList();
+    }
+
+    final widgets = _remindOptions
+        .map((o) => chip(o.$1, o.$2, () => setState(() => _remindKey = o.$1)))
+        .toList();
+    final customLabel = _customDateTime == null
+        ? '🗓️ Personnaliser'
+        : '🗓️ ${_customDateTime!.day}/${_customDateTime!.month} à ${_two(_customDateTime!.hour)}:${_two(_customDateTime!.minute)}';
+    widgets.add(chip('custom', customLabel, _pickCustom));
+    return widgets;
+  }
+
+  Future<void> _pickCustom() async {
+    final now = DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      initialDate: now,
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 365)),
+    );
+    if (date == null || !mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(now.add(const Duration(hours: 1))),
+    );
+    if (time == null || !mounted) return;
+    setState(() {
+      _customDateTime =
+          DateTime(date.year, date.month, date.day, time.hour, time.minute);
+      _remindKey = 'custom';
+    });
   }
 
   DateTime? _remindDateTime(String key) {
@@ -794,6 +826,8 @@ class _CommandPanelState extends State<CommandPanel> {
       case '3d':
         final t = now.add(const Duration(days: 3));
         return DateTime(t.year, t.month, t.day, 9);
+      case 'custom':
+        return _customDateTime;
       default:
         return null;
     }

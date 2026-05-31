@@ -605,7 +605,6 @@
 
   // ----- À lire plus tard : champs multiples + rappel programmé -----
   const REMIND_CHOICES = [
-    { key: "none", label: "Aucun" },
     { key: "1h",   label: "Dans 1 h" },
     { key: "eve",  label: "Ce soir 20h" },
     { key: "tom",  label: "Demain 9h" },
@@ -640,10 +639,13 @@
       <button class="chip" id="rlAdd" style="margin-top:6px">＋ Ajouter</button>
       <div class="section-label" style="margin-top:14px">⏰ Me le rappeler</div>
       <div class="rl-timer" id="rlTimer"></div>
+      <input type="datetime-local" class="field" id="rlCustom" style="display:none;margin-top:8px">
       <button class="btn btn-primary" id="rlSave" style="margin-top:14px" disabled>Enregistrer</button>`;
 
-    const fields = $("#rlFields", body), save = $("#rlSave", body), timer = $("#rlTimer", body);
-    let remindKey = "none";
+    const fields = $("#rlFields", body), save = $("#rlSave", body),
+          timer = $("#rlTimer", body), customInput = $("#rlCustom", body);
+    let remindKey = null;       // aucun rappel par défaut
+    let customTs = null;
 
     const refresh = () => {
       const any = [...fields.querySelectorAll("input")].some(i => i.value.trim());
@@ -662,21 +664,41 @@
 
     $("#rlAdd", body).onclick = () => { addField(true); haptic(); };
 
+    const selectChip = (b) => {
+      timer.querySelectorAll(".rl-chip").forEach(x => x.classList.remove("on"));
+      b.classList.add("on");
+    };
+
     REMIND_CHOICES.forEach(c => {
-      const b = el("button", "rl-chip" + (c.key === remindKey ? " on" : ""), c.label);
+      const b = el("button", "rl-chip", c.label);
       b.onclick = () => {
         remindKey = c.key;
-        timer.querySelectorAll(".rl-chip").forEach(x => x.classList.remove("on"));
-        b.classList.add("on");
+        customInput.style.display = "none";
+        selectChip(b);
         haptic();
       };
       timer.appendChild(b);
     });
 
+    // Bouton « Personnaliser » → choisir jour + heure
+    const custom = el("button", "rl-chip", "🗓️ Personnaliser");
+    custom.onclick = () => {
+      remindKey = "custom";
+      selectChip(custom);
+      customInput.style.display = "block";
+      customInput.focus();
+      haptic();
+    };
+    timer.appendChild(custom);
+
+    customInput.onchange = () => {
+      customTs = customInput.value ? new Date(customInput.value).getTime() : null;
+    };
+
     save.onclick = () => {
       const values = [...fields.querySelectorAll("input")].map(i => i.value.trim()).filter(Boolean);
       if (!values.length) return;
-      const remindAt = remindAtFor(remindKey);
+      const remindAt = remindKey === "custom" ? customTs : remindAtFor(remindKey);
       values.forEach(text => {
         const item = { id: uid(), createdAt: Date.now(), text, remindAt, done: false };
         State.reading.unshift(item);

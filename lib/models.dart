@@ -71,46 +71,42 @@ class Todo {
       );
 }
 
-class SearchEntry {
+/// Élément « À lire plus tard » : un lien ou un texte, avec rappel optionnel.
+class ReadItem {
   final String id;
   final DateTime createdAt;
-  final String query;
-  final String type; // "Définition" | "Explication"
-  final String term;
-  final String body;
-  final String source;
-  final String? url;
+  String text;
+  DateTime? remindAt;
+  bool done;
 
-  SearchEntry({
+  ReadItem({
     required this.id,
     required this.createdAt,
-    required this.query,
-    required this.type,
-    required this.term,
-    required this.body,
-    required this.source,
-    this.url,
+    required this.text,
+    this.remindAt,
+    this.done = false,
   });
+
+  bool get isUrl => RegExp(r'^https?://', caseSensitive: false).hasMatch(text);
+
+  /// Identifiant entier stable pour la notification (dérivé de l'id texte).
+  int get notificationId => id.hashCode & 0x7fffffff;
 
   Map<String, dynamic> toJson() => {
         'id': id,
         'createdAt': createdAt.toIso8601String(),
-        'query': query,
-        'type': type,
-        'term': term,
-        'body': body,
-        'source': source,
-        'url': url,
+        'text': text,
+        'remindAt': remindAt?.toIso8601String(),
+        'done': done,
       };
 
-  factory SearchEntry.fromJson(Map<String, dynamic> j) => SearchEntry(
+  factory ReadItem.fromJson(Map<String, dynamic> j) => ReadItem(
         id: j['id'] as String,
         createdAt: DateTime.parse(j['createdAt'] as String),
-        query: j['query'] as String? ?? '',
-        type: j['type'] as String? ?? 'Explication',
-        term: j['term'] as String? ?? '',
-        body: j['body'] as String? ?? '',
-        source: j['source'] as String? ?? '',
-        url: j['url'] as String?,
+        text: j['text'] as String? ?? '',
+        remindAt: (j['remindAt'] as String?) != null
+            ? DateTime.parse(j['remindAt'] as String)
+            : null,
+        done: j['done'] as bool? ?? false,
       );
 }

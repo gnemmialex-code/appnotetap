@@ -22,10 +22,10 @@ void main() {
     await tester.tap(find.text('Tap Back'));
     await tester.pumpAndSettle();
 
-    // Les 4 actions apparaissent (« To-Do » existe aussi dans la barre d'onglets).
+    // Les actions apparaissent (« To-Do » et « À lire » existent aussi en onglet).
     expect(find.text('Note'), findsOneWidget);
     expect(find.text('To-Do'), findsWidgets);
-    expect(find.text('Rechercher'), findsOneWidget);
+    expect(find.text('À lire'), findsWidgets);
     expect(find.text('Voir les notes'), findsOneWidget);
   });
 }

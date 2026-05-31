@@ -9,13 +9,14 @@
 import 'package:flutter/material.dart';
 
 import 'models.dart';
-import 'search_service.dart';
+import 'notifications.dart';
 import 'store.dart';
 
 final store = Store();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Notifications.init();
   await store.load();
   runApp(const TapBackApp());
 }
@@ -98,7 +99,7 @@ class _HomePageState extends State<HomePage> {
         final screens = [
           const NotesScreen(),
           const TodosScreen(),
-          const SearchesScreen(),
+          const ReadingScreen(),
         ];
         return Scaffold(
           body: SafeArea(bottom: false, child: screens[_tab]),
@@ -117,7 +118,8 @@ class _HomePageState extends State<HomePage> {
             destinations: const [
               NavigationDestination(icon: Icon(Icons.mic_none), label: 'Notes'),
               NavigationDestination(icon: Icon(Icons.checklist), label: 'To-Do'),
-              NavigationDestination(icon: Icon(Icons.search), label: 'Recherches'),
+              NavigationDestination(
+                  icon: Icon(Icons.bookmark_border), label: 'À lire'),
             ],
           ),
         );
@@ -409,50 +411,72 @@ class _TodosScreenState extends State<TodosScreen> {
   }
 }
 
-class SearchesScreen extends StatelessWidget {
-  const SearchesScreen({super.key});
+class ReadingScreen extends StatelessWidget {
+  const ReadingScreen({super.key});
   @override
   Widget build(BuildContext context) {
-    final items = store.searches;
+    final items = store.reading;
     return _Page(
-      title: 'Recherches',
+      title: 'À lire',
       child: items.isEmpty
-          ? const _Empty(Icons.search, 'Aucune recherche',
-              "Touche « Tap Back » puis Rechercher pour la définition ou l'explication d'un mot.")
+          ? const _Empty(Icons.bookmark_border, 'Rien à lire pour l\'instant',
+              'Touche « Tap Back » puis « À lire » pour garder un lien/texte et programmer un rappel.')
           : ListView.builder(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
               itemCount: items.length,
               itemBuilder: (context, i) {
-                final s = items[i];
+                final it = items[i];
                 return Container(
                   margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.all(14),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                   decoration: _card,
-                  child: Column(
+                  child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(s.term,
-                                style: const TextStyle(
-                                    fontSize: 17, fontWeight: FontWeight.w600)),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline, size: 20),
-                            color: _textSecondary,
-                            onPressed: () => store.deleteSearch(s.id),
-                          ),
-                        ],
+                      IconButton(
+                        icon: Icon(it.done
+                            ? Icons.check_circle
+                            : Icons.radio_button_unchecked),
+                        color: it.done ? Colors.green : _textSecondary,
+                        onPressed: () => store.toggleReading(it.id),
                       ),
-                      Text(s.body,
-                          maxLines: 4,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: _textSecondary)),
-                      const SizedBox(height: 6),
-                      Text('${s.type} · ${s.source}',
-                          style: const TextStyle(
-                              fontSize: 12, color: Colors.white38)),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              it.text,
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 16,
+                                decoration:
+                                    it.done ? TextDecoration.lineThrough : null,
+                                color: it.done ? Colors.white38 : Colors.white,
+                              ),
+                            ),
+                            if (it.remindAt != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Text('⏰ ${formatStamp(it.remindAt!)}',
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.orangeAccent)),
+                              ),
+                            Text('Ajouté : ${formatStamp(it.createdAt)}',
+                                style: const TextStyle(
+                                    fontSize: 12, color: Colors.white38)),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, size: 20),
+                        color: _textSecondary,
+                        onPressed: () {
+                          Notifications.cancel(it.notificationId);
+                          store.deleteReading(it.id);
+                        },
+                      ),
                     ],
                   ),
                 );
@@ -466,10 +490,10 @@ class SearchesScreen extends StatelessWidget {
 // Fenêtre de commande (Tap Back)
 // ============================================================
 
-enum _Mode { choices, note, todo, search }
+enum _Mode { choices, note, todo, reading }
 
 class CommandPanel extends StatefulWidget {
-  /// Ouvre l'app sur un onglet (0 = Notes, 1 = To-Do, 2 = Recherches).
+  /// Ouvre l'app sur un onglet (0 = Notes, 1 = To-Do, 2 = À lire).
   final void Function(int index) onOpenTab;
   const CommandPanel({super.key, required this.onOpenTab});
   @override
@@ -482,18 +506,27 @@ class _CommandPanelState extends State<CommandPanel> {
   final _noteTitle = TextEditingController();
   final _noteBody = TextEditingController();
   final _todoText = TextEditingController();
-  final _searchText = TextEditingController();
 
-  bool _searching = false;
-  LookupResult? _result;
-  bool _searchDone = false;
+  // « À lire » : un ou plusieurs champs + choix de rappel.
+  final List<TextEditingController> _readControllers = [TextEditingController()];
+  String _remindKey = 'none';
+
+  static const _remindOptions = [
+    ('none', 'Aucun'),
+    ('1h', 'Dans 1 h'),
+    ('eve', 'Ce soir 20h'),
+    ('tom', 'Demain 9h'),
+    ('3d', 'Dans 3 j'),
+  ];
 
   @override
   void dispose() {
     _noteTitle.dispose();
     _noteBody.dispose();
     _todoText.dispose();
-    _searchText.dispose();
+    for (final c in _readControllers) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -535,8 +568,8 @@ class _CommandPanelState extends State<CommandPanel> {
         return _notePanel();
       case _Mode.todo:
         return _todoPanel();
-      case _Mode.search:
-        return _searchPanel();
+      case _Mode.reading:
+        return _readingPanel();
     }
   }
 
@@ -551,8 +584,8 @@ class _CommandPanelState extends State<CommandPanel> {
             const SizedBox(width: 8),
             _cmd(Icons.add_task, 'To-Do', () => setState(() => _mode = _Mode.todo)),
             const SizedBox(width: 8),
-            _cmd(Icons.search, 'Rechercher',
-                () => setState(() => _mode = _Mode.search)),
+            _cmd(Icons.bookmark_add_outlined, 'À lire',
+                () => setState(() => _mode = _Mode.reading)),
           ],
         ),
         const SizedBox(height: 8),
@@ -687,114 +720,114 @@ class _CommandPanelState extends State<CommandPanel> {
     );
   }
 
-  Widget _searchPanel() {
+  Widget _readingPanel() {
     return Column(
-      key: const ValueKey('search'),
+      key: const ValueKey('reading'),
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _head('Rechercher'),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-                child: _field(_searchText, 'Un mot, une explication…',
-                    autofocus: true, onSubmit: _runSearch)),
-            const SizedBox(width: 8),
-            _WhiteButton(
-              onTap: _runSearch,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              filledBlack: true,
-              child: const Icon(Icons.search, color: Colors.white),
-            ),
-          ],
+        _head('À lire plus tard'),
+        const SizedBox(height: 8),
+        const Text(
+          'Garde un lien ou un texte à lire plus tard. Ajoute-en autant que tu veux, et programme un rappel.',
+          style: TextStyle(color: Colors.black54, fontSize: 13, height: 1.4),
         ),
-        if (_searching)
-          const Padding(
-            padding: EdgeInsets.all(24),
-            child: Center(
-                child: SizedBox(
-                    width: 28,
-                    height: 28,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 3, color: Colors.black))),
-          ),
-        if (!_searching && _searchDone) _searchResultView(),
+        const SizedBox(height: 10),
+        for (int i = 0; i < _readControllers.length; i++) ...[
+          _field(_readControllers[i],
+              i == 0 ? 'Lien ou texte à lire…' : 'Autre élément…',
+              autofocus: i == 0),
+          const SizedBox(height: 8),
+        ],
+        Align(
+          alignment: Alignment.centerLeft,
+          child: _chip('＋ Ajouter',
+              () => setState(() => _readControllers.add(TextEditingController()))),
+        ),
+        const SizedBox(height: 14),
+        const Text('⏰ Me le rappeler',
+            style: TextStyle(
+                fontWeight: FontWeight.w700, color: Colors.black, fontSize: 14)),
+        const SizedBox(height: 8),
+        Wrap(spacing: 7, runSpacing: 7, children: _remindChips()),
+        const SizedBox(height: 14),
+        _primary('Enregistrer', _saveReading),
       ],
     );
   }
 
-  Widget _searchResultView() {
-    final r = _result;
-    if (r == null) {
-      return const Padding(
-        padding: EdgeInsets.only(top: 14),
-        child: Text('Aucun résultat. Essaie un autre mot.',
-            style: TextStyle(color: Colors.black54)),
-      );
-    }
-    return Container(
-      margin: const EdgeInsets.only(top: 14),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-          color: const Color(0xFFF6F6F8),
-          borderRadius: BorderRadius.circular(14)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(r.type.toUpperCase(),
-              style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF0A6CFF))),
-          const SizedBox(height: 4),
-          Text(r.term,
-              style: const TextStyle(
-                  fontSize: 22, fontWeight: FontWeight.w700, color: Colors.black)),
-          const SizedBox(height: 8),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 320),
-            child: SingleChildScrollView(
-              child: Text(r.body,
-                  style: const TextStyle(color: Colors.black87, height: 1.5)),
-            ),
+  List<Widget> _remindChips() {
+    return _remindOptions.map((o) {
+      final on = _remindKey == o.$1;
+      return GestureDetector(
+        onTap: () => setState(() => _remindKey = o.$1),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: on ? const Color(0xFF0A0A0C) : Colors.white,
+            border: Border.all(
+                color: on ? const Color(0xFF0A0A0C) : Colors.black12),
+            borderRadius: BorderRadius.circular(11),
           ),
-          const SizedBox(height: 10),
-          Text('Source : ${r.source}',
-              style: const TextStyle(fontSize: 12, color: Colors.black45)),
-        ],
-      ),
-    );
+          child: Text(o.$2,
+              style: TextStyle(
+                  color: on ? Colors.white : Colors.black,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13)),
+        ),
+      );
+    }).toList();
   }
 
-  Future<void> _runSearch() async {
-    final q = _searchText.text.trim();
-    if (q.isEmpty) return;
-    FocusScope.of(context).unfocus();
-    setState(() {
-      _searching = true;
-      _searchDone = false;
-      _result = null;
-    });
-    final res = await SearchService.lookup(q);
-    if (!mounted) return;
-    setState(() {
-      _searching = false;
-      _searchDone = true;
-      _result = res;
-    });
-    if (res != null) {
-      store.addSearch(SearchEntry(
-        id: _uid(),
-        createdAt: DateTime.now(),
-        query: q,
-        type: res.type,
-        term: res.term,
-        body: res.body,
-        source: res.source,
-        url: res.url,
-      ));
+  DateTime? _remindDateTime(String key) {
+    final now = DateTime.now();
+    switch (key) {
+      case '1h':
+        return now.add(const Duration(hours: 1));
+      case 'eve':
+        var d = DateTime(now.year, now.month, now.day, 20);
+        if (!d.isAfter(now)) d = d.add(const Duration(days: 1));
+        return d;
+      case 'tom':
+        final t = now.add(const Duration(days: 1));
+        return DateTime(t.year, t.month, t.day, 9);
+      case '3d':
+        final t = now.add(const Duration(days: 3));
+        return DateTime(t.year, t.month, t.day, 9);
+      default:
+        return null;
     }
+  }
+
+  void _saveReading() {
+    final texts = _readControllers
+        .map((c) => c.text.trim())
+        .where((t) => t.isNotEmpty)
+        .toList();
+    if (texts.isEmpty) return;
+    final remindAt = _remindDateTime(_remindKey);
+    if (remindAt != null) Notifications.requestPermission();
+    for (final text in texts) {
+      final item = ReadItem(
+          id: _uid(), createdAt: DateTime.now(), text: text, remindAt: remindAt);
+      store.addReading(item);
+      if (remindAt != null) {
+        Notifications.schedule(
+            id: item.notificationId, body: text, when: remindAt);
+      }
+    }
+    widget.onOpenTab(2);
+    _close();
+  }
+
+  Widget _chip(String label, VoidCallback onTap) {
+    return _WhiteButton(
+      onTap: onTap,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+      child: Text(label,
+          style: const TextStyle(
+              color: Colors.black, fontWeight: FontWeight.w600, fontSize: 13)),
+    );
   }
 
   Widget _field(TextEditingController c, String hint,

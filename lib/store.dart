@@ -9,11 +9,11 @@ import 'models.dart';
 class Store extends ChangeNotifier {
   static const _kNotes = 'tbc_notes';
   static const _kTodos = 'tbc_todos';
-  static const _kSearches = 'tbc_searches';
+  static const _kReading = 'tbc_reading';
 
   final List<Note> notes = [];
   final List<Todo> todos = [];
-  final List<SearchEntry> searches = [];
+  final List<ReadItem> reading = [];
 
   bool _loaded = false;
   bool get loaded => _loaded;
@@ -26,9 +26,9 @@ class Store extends ChangeNotifier {
     todos
       ..clear()
       ..addAll(_decodeList(prefs.getString(_kTodos), Todo.fromJson));
-    searches
+    reading
       ..clear()
-      ..addAll(_decodeList(prefs.getString(_kSearches), SearchEntry.fromJson));
+      ..addAll(_decodeList(prefs.getString(_kReading), ReadItem.fromJson));
     _loaded = true;
     notifyListeners();
   }
@@ -78,16 +78,23 @@ class Store extends ChangeNotifier {
     await _save(_kTodos, todos);
   }
 
-  // --- Searches ---
-  Future<void> addSearch(SearchEntry s) async {
-    searches.insert(0, s);
+  // --- À lire ---
+  Future<void> addReading(ReadItem r) async {
+    reading.insert(0, r);
     notifyListeners();
-    await _save(_kSearches, searches);
+    await _save(_kReading, reading);
   }
 
-  Future<void> deleteSearch(String id) async {
-    searches.removeWhere((e) => e.id == id);
+  Future<void> toggleReading(String id) async {
+    final r = reading.firstWhere((e) => e.id == id);
+    r.done = !r.done;
     notifyListeners();
-    await _save(_kSearches, searches);
+    await _save(_kReading, reading);
+  }
+
+  Future<void> deleteReading(String id) async {
+    reading.removeWhere((e) => e.id == id);
+    notifyListeners();
+    await _save(_kReading, reading);
   }
 }

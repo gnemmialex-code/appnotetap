@@ -35,10 +35,12 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
 
-  # Persistance locale (notes / to-dos / recherches)
+  # Persistance locale (notes / to-dos / à lire)
   shared_preferences: ^2.3.2
-  # Appels réseau pour la recherche (dictionnaire FR + Wikipédia)
-  http: ^1.2.2
+  # Notifications locales planifiées (rappels « À lire plus tard »)
+  flutter_local_notifications: ^21.0.0
+  timezone: ^0.11.0
+  flutter_timezone: ^5.1.0
 
 dev_dependencies:
   flutter_test:

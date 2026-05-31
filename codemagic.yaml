@@ -1,0 +1,35 @@
+# Configuration CI/CD Codemagic pour TapBack Note (Flutter).
+# Doc : https://docs.codemagic.io/yaml/yaml-getting-started/
+
+workflows:
+  flutter-ci:
+    name: TapBack Note – CI (analyze + test + build)
+    # Instance macOS (nécessaire pour compiler iOS). Pour une CI Android seule,
+    # tu peux passer à `instance_type: linux_x2`.
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+    scripts:
+      - name: Récupérer les dépendances
+        script: flutter pub get
+      - name: Analyse statique
+        script: flutter analyze
+      - name: Tests
+        script: flutter test
+      - name: Build Android (APK release)
+        script: flutter build apk --release
+      - name: Build iOS (sans signature)
+        script: flutter build ios --release --no-codesign
+    artifacts:
+      - build/**/outputs/**/*.apk
+      - build/ios/iphoneos/*.app
+      - flutter_drive.log

@@ -24,6 +24,7 @@
     notes: Store.get("notes", []),
     todos: Store.get("todos", []),
     requests: Store.get("requests", []),
+    reading: Store.get("reading", []),
   };
 
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -109,7 +110,7 @@
       t.classList.toggle("active", t.dataset.tab === State.tab));
     if (State.tab === "notes") renderNotes();
     if (State.tab === "todos") renderTodos();
-    if (State.tab === "space") renderSpace();
+    if (State.tab === "reading") renderReading();
   }
 
   function emptyState(ico, title, msg) {
@@ -309,17 +310,17 @@
       floating.innerHTML = `
         <button class="cmd-btn rec" data-act="voice"><span class="ci">🎙️</span><span>Note</span></button>
         <button class="cmd-btn" data-act="todo"><span class="ci">✏️</span><span>To-Do</span></button>
-        <button class="cmd-btn" data-act="space"><span class="ci">✨</span><span>Mon espace</span></button>
+        <button class="cmd-btn" data-act="reading"><span class="ci">🔖</span><span>À lire</span></button>
         <button class="cmd-more" id="cmdMore">${State.showMore ? "▴ Voir moins" : "▾ Voir plus"}</button>
         ${openRow}`;
       floating.querySelectorAll(".cmd-btn").forEach(b =>
         b.onclick = () => {
           const act = b.dataset.act;
-          if (act === "voice")  return openPanel("Note vocale", voicePanel);
-          if (act === "todo")   return openPanel("To-Do", todoPanel);
-          if (act === "space")  return openPanel("Créer mon espace", spacePanel);
-          if (act === "notes")  { hideOverlay(); setTimeout(showNotesList, 180); }
-          if (act === "todos")  { hideOverlay(); setTimeout(showTodosList, 180); }
+          if (act === "voice")   return openPanel("Note vocale", voicePanel);
+          if (act === "todo")    return openPanel("To-Do", todoPanel);
+          if (act === "reading") return openPanel("À lire plus tard", readLaterPanel);
+          if (act === "notes")   { hideOverlay(); setTimeout(showNotesList, 180); }
+          if (act === "todos")   { hideOverlay(); setTimeout(showTodosList, 180); }
         });
       $("#cmdMore", floating).onclick = () => {
         State.showMore = !State.showMore;
@@ -600,6 +601,139 @@
         <div class="row-sub">Tu la retrouveras dans l'onglet « Mon espace ». Tu seras prévenu(e) quand elle sera prête.</div></div>`;
       haptic();
     };
+  }
+
+  // ----- À lire plus tard : champs multiples + rappel programmé -----
+  const REMIND_CHOICES = [
+    { key: "none", label: "Aucun" },
+    { key: "1h",   label: "Dans 1 h" },
+    { key: "eve",  label: "Ce soir 20h" },
+    { key: "tom",  label: "Demain 9h" },
+    { key: "3d",   label: "Dans 3 j" },
+  ];
+
+  function remindAtFor(key) {
+    const now = new Date();
+    switch (key) {
+      case "1h": return Date.now() + 3600 * 1000;
+      case "eve": {
+        const d = new Date(); d.setHours(20, 0, 0, 0);
+        if (d.getTime() <= Date.now()) d.setDate(d.getDate() + 1);
+        return d.getTime();
+      }
+      case "tom": {
+        const d = new Date(); d.setDate(now.getDate() + 1); d.setHours(9, 0, 0, 0);
+        return d.getTime();
+      }
+      case "3d": {
+        const d = new Date(); d.setDate(now.getDate() + 3); d.setHours(9, 0, 0, 0);
+        return d.getTime();
+      }
+      default: return null;
+    }
+  }
+
+  function readLaterPanel(body) {
+    body.innerHTML = `
+      <div class="space-intro">🔖 Garde un lien ou un texte à lire plus tard. Ajoute-en autant que tu veux avec « ＋ », et programme un rappel.</div>
+      <div id="rlFields"></div>
+      <button class="chip" id="rlAdd" style="margin-top:6px">＋ Ajouter</button>
+      <div class="section-label" style="margin-top:14px">⏰ Me le rappeler</div>
+      <div class="rl-timer" id="rlTimer"></div>
+      <button class="btn btn-primary" id="rlSave" style="margin-top:14px" disabled>Enregistrer</button>`;
+
+    const fields = $("#rlFields", body), save = $("#rlSave", body), timer = $("#rlTimer", body);
+    let remindKey = "none";
+
+    const refresh = () => {
+      const any = [...fields.querySelectorAll("input")].some(i => i.value.trim());
+      save.disabled = !any;
+    };
+    const addField = (focus = false) => {
+      const inp = el("input", "field");
+      inp.placeholder = "Lien ou texte à lire…";
+      inp.style.marginBottom = "8px";
+      inp.autocomplete = "off";
+      inp.oninput = refresh;
+      fields.appendChild(inp);
+      if (focus) inp.focus();
+    };
+    addField(true); // champ principal
+
+    $("#rlAdd", body).onclick = () => { addField(true); haptic(); };
+
+    REMIND_CHOICES.forEach(c => {
+      const b = el("button", "rl-chip" + (c.key === remindKey ? " on" : ""), c.label);
+      b.onclick = () => {
+        remindKey = c.key;
+        timer.querySelectorAll(".rl-chip").forEach(x => x.classList.remove("on"));
+        b.classList.add("on");
+        haptic();
+      };
+      timer.appendChild(b);
+    });
+
+    save.onclick = () => {
+      const values = [...fields.querySelectorAll("input")].map(i => i.value.trim()).filter(Boolean);
+      if (!values.length) return;
+      const remindAt = remindAtFor(remindKey);
+      values.forEach(text => {
+        const item = { id: uid(), createdAt: Date.now(), text, remindAt, done: false };
+        State.reading.unshift(item);
+        if (remindAt) scheduleReadReminder(text, remindAt);
+      });
+      Store.set("reading", State.reading);
+      State.tab = "reading"; render();
+      hideOverlay(); haptic();
+    };
+  }
+
+  function scheduleReadReminder(text, ts) {
+    if (!("Notification" in window)) return;
+    Notification.requestPermission().then(perm => {
+      if (perm !== "granted") return;
+      const delay = ts - Date.now();
+      // En démo : planifiable tant que l'onglet reste ouvert (≤ 24 h).
+      if (delay > 0 && delay < 24 * 3600 * 1000) {
+        setTimeout(() => new Notification("📖 À lire", { body: text }), delay);
+      }
+    });
+  }
+
+  function renderReading() {
+    content.innerHTML = "";
+    content.appendChild(el("div", "page-title", "À lire"));
+    if (!State.reading.length) {
+      content.appendChild(emptyState("🔖", "Rien à lire pour l'instant",
+        "Clique sur <b>Tap Back</b> puis 🔖 <b>À lire</b> pour garder un lien/texte et programmer un rappel."));
+      return;
+    }
+    State.reading.forEach(it => {
+      const c = el("div", "card");
+      const r = el("div", "row-flex");
+      const chk = el("button", null, it.done ? "✅" : "⚪️");
+      chk.style.cssText = "background:none;border:none;font-size:22px;cursor:pointer;line-height:1;";
+      chk.onclick = () => { it.done = !it.done; Store.set("reading", State.reading); render(); };
+      const mid = el("div"); mid.style.flex = "1";
+      const isURL = /^https?:\/\//i.test(it.text);
+      mid.innerHTML =
+        `<div class="row-title" style="${it.done ? "opacity:.4;text-decoration:line-through" : ""}">${esc(it.text).slice(0, 120)}</div>` +
+        (it.remindAt ? `<div class="row-sub">⏰ ${stamp(it.remindAt)}</div>` : "") +
+        `<div class="row-date">Ajouté : ${stamp(it.createdAt)}</div>`;
+      const right = el("div");
+      right.style.cssText = "display:flex;flex-direction:column;gap:6px;align-items:flex-end;";
+      if (isURL) {
+        const open = el("a", "linkbtn", "Ouvrir ↗");
+        open.href = it.text; open.target = "_blank";
+        right.appendChild(open);
+      }
+      const del = el("button", "swipe-del", "🗑");
+      del.onclick = () => { State.reading = State.reading.filter(x => x.id !== it.id); Store.set("reading", State.reading); render(); };
+      right.appendChild(del);
+      r.append(chk, mid, right);
+      c.appendChild(r);
+      content.appendChild(c);
+    });
   }
 
   // ---------- Haptics (vibration where supported) ----------

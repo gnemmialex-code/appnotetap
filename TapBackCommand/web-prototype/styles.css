@@ -304,6 +304,9 @@ main::-webkit-scrollbar { width: 0; }
 .cmd-btn .ci { font-size: 23px; }
 .cmd-btn.rec .ci { color: var(--record); }
 
+/* Fenêtre à 2 colonnes (quand « Mon espace » est retiré) */
+.floating.cols2 { grid-template-columns: repeat(2, 1fr); }
+
 /* Bouton "Voir plus / Voir moins" */
 .cmd-more {
   grid-column: 1 / -1;
@@ -437,7 +440,23 @@ main::-webkit-scrollbar { width: 0; }
 .sheet .chip, .floating.panel .chip { background: #e3e3e8; color: #0a0a0c; }
 .sheet .linkbtn, .floating.panel .linkbtn { color: #0a6cff; }
 
-/* Intro "Mon espace" */
+/* Minuteur "À lire" : puces de choix de rappel */
+.rl-timer { display: flex; flex-wrap: wrap; gap: 7px; }
+.rl-chip {
+  border: 1px solid rgba(0,0,0,0.12);
+  background: #fff;
+  color: #0a0a0c;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-radius: 11px;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.rl-chip.on { background: #0a0a0c; color: #fff; border-color: #0a0a0c; }
+
+/* Intro "Mon espace" / "À lire" */
 .space-intro {
   background: #f6f6f8;
   border-radius: 14px;

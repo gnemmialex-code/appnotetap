@@ -237,7 +237,7 @@ body {
 .home-indicator {
   position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
   width: 134px; height: 5px; border-radius: 3px;
-  background: rgba(0,0,0,0.32);
+  background: rgba(255,255,255,0.5);
   z-index: 80; cursor: pointer;
 }
 
@@ -245,7 +245,7 @@ body {
 main {
   flex: 1;
   overflow-y: auto;
-  padding: 8px 18px 12px;
+  padding: 8px 18px 104px;   /* marge basse = laisser passer la bulle flottante */
   -webkit-overflow-scrolling: touch;
 }
 main::-webkit-scrollbar { width: 0; }
@@ -438,30 +438,46 @@ main::-webkit-scrollbar { width: 0; }
 .empty h3 { color: #fff; margin: 14px 0 6px; }
 
 /* Tab bar */
+/* Léger dégradé blanc en bas (faible, pour deviner les touches) */
+.app-layer::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 96px;
+  background: linear-gradient(to top, rgba(255,255,255,0.10), transparent);
+  pointer-events: none;
+  z-index: 34;
+}
+
+/* Barre d'onglets : bulle translucide flottante (ne touche pas les bords) */
 .tabbar {
-  flex-shrink: 0;
-  height: 82px;
+  position: absolute;
+  left: 14px; right: 14px; bottom: 22px;
+  height: 62px;
   display: flex;
-  border-top: .5px solid rgba(0,0,0,0.08);
-  background: rgba(255,255,255,0.97);   /* bas de page blanc */
-  backdrop-filter: blur(20px);
-  padding-bottom: 16px;
+  border-radius: 30px;
+  background: rgba(255,255,255,0.12);
+  backdrop-filter: blur(26px) saturate(160%);
+  -webkit-backdrop-filter: blur(26px) saturate(160%);
+  border: 1px solid rgba(255,255,255,0.18);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.45);
+  z-index: 35;
 }
 .tab {
   flex: 1; min-width: 0; background: none; border: none; cursor: pointer;
-  color: rgba(0,0,0,0.45);              /* texte sombre lisible */
+  color: rgba(255,255,255,0.55);
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 4px; font-size: 11px; font-weight: 600; padding: 0 1px;
+  gap: 3px; font-size: 10px; font-weight: 600; padding: 0 1px;
 }
 .tab span:last-child { white-space: nowrap; }
 .tab .ti {
-  font-size: 21px;
+  font-size: 20px;
   filter: grayscale(1) opacity(.5);
   transition: transform .22s cubic-bezier(.3,1.4,.4,1), filter .22s;
 }
-/* Onglet sélectionné : texte noir, emoji agrandi + en couleur */
-.tab.active { color: #0a0a0c; }
-.tab.active .ti { filter: none; transform: scale(1.4) translateY(-1px); }
+/* Onglet sélectionné : texte blanc, emoji agrandi + en couleur */
+.tab.active { color: #fff; }
+.tab.active .ti { filter: none; transform: scale(1.35) translateY(-1px); }
 
 /* ============ Floating command overlay ============ */
 .overlay-host { position: absolute; inset: 0; z-index: 60; pointer-events: none; }

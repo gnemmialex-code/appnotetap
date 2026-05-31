@@ -120,6 +120,10 @@
     if (State.tab === "carnet") renderCarnet();
     if (State.tab === "settings") renderSettings();
 
+    // Indicateur de points visible seulement sur Capture
+    const cd = $("#capDots");
+    if (cd) cd.style.display = State.tab === "capture" ? "flex" : "none";
+
     // Transition douce uniquement lors d'un changement d'onglet
     if (State.tab !== _prevTab) {
       content.classList.remove("page-enter");
@@ -136,9 +140,10 @@
   }
 
   // ----- Notes -----
-  function renderNotes(target = content, withTitle = true) {
+  function renderNotes(target = content, withTitle = true, desc = "") {
     target.innerHTML = "";
     if (withTitle) target.appendChild(el("div", "page-title", "Notes"));
+    if (desc) target.appendChild(el("div", "page-desc", desc));
     if (!State.notes.length) {
       target.appendChild(emptyState("🎙️", "Aucune note",
         "Clique sur <b>Tap Back</b> puis 🎙️ pour enregistrer une note vocale."));
@@ -170,9 +175,10 @@
   const DAY_MS = 24 * 60 * 60 * 1000;
   const isArchived = (t) => t.done && t.doneAt && (Date.now() - t.doneAt) >= DAY_MS;
 
-  function renderTodos(target = content, withTitle = true) {
+  function renderTodos(target = content, withTitle = true, desc = "") {
     target.innerHTML = "";
     if (withTitle) target.appendChild(el("div", "page-title", "To-Do"));
+    if (desc) target.appendChild(el("div", "page-desc", desc));
 
     const active = State.todos.filter(t => !isArchived(t));
     const done = State.todos.filter(t => t.done)
@@ -738,9 +744,10 @@
     });
   }
 
-  function renderReading(target = content, withTitle = true) {
+  function renderReading(target = content, withTitle = true, desc = "") {
     target.innerHTML = "";
     if (withTitle) target.appendChild(el("div", "page-title", "À lire"));
+    if (desc) target.appendChild(el("div", "page-desc", desc));
     if (!State.reading.length) {
       target.appendChild(emptyState("🔖", "Rien à lire pour l'instant",
         "Clique sur <b>Tap Back</b> puis 🔖 <b>À lire</b> pour garder un lien/texte et programmer un rappel."));
@@ -774,51 +781,52 @@
     });
   }
 
-  // ----- Capture : Notes + To-Do + À lire dans un seul écran swipeable -----
+  // ----- Capture : un écran à la fois (titre + description + liste), swipe -----
   function renderCapture() {
     content.innerHTML = "";
     const panes = ["notes", "todos", "reading"];
-    const labels = { notes: "🎙️ Notes", todos: "✅ To-Do", reading: "🔖 À lire" };
+    const desc = {
+      notes: "Tes notes vocales et idées, capturées en un geste.",
+      todos: "Tes tâches rapides du moment.",
+      reading: "Liens et textes gardés pour plus tard.",
+    };
 
-    // Mini-onglet (segment)
-    const seg = el("div", "cap-seg");
     const scroller = el("div", "cap-scroller");
     const paneEls = {};
     panes.forEach(k => { const p = el("div", "cap-pane"); paneEls[k] = p; scroller.appendChild(p); });
 
-    // Contenu de chaque volet (sans gros titre, le segment sert d'en-tête)
-    renderNotes(paneEls.notes, false);
-    renderTodos(paneEls.todos, false);
-    renderReading(paneEls.reading, false);
+    // Chaque volet : grand titre + courte description + liste
+    renderNotes(paneEls.notes, true, desc.notes);
+    renderTodos(paneEls.todos, true, desc.todos);
+    renderReading(paneEls.reading, true, desc.reading);
 
-    const updateSeg = () => {
-      [...seg.children].forEach((c, i) => c.classList.toggle("on", i === State.capIndex));
+    content.appendChild(scroller);
+
+    // Indicateur de points (vers le milieu-bas, au-dessus de la barre)
+    const dotsHost = $("#capDots");
+    const renderDots = () => {
+      if (!dotsHost) return;
+      dotsHost.innerHTML = "";
+      panes.forEach((k, i) =>
+        dotsHost.appendChild(el("span", "cap-dot" + (i === State.capIndex ? " on" : ""))));
     };
     const goTo = (i) => {
-      State.capIndex = i;
-      scroller.scrollTo({ left: i * scroller.clientWidth, behavior: "smooth" });
-      updateSeg();
+      State.capIndex = Math.max(0, Math.min(2, i));
+      scroller.scrollTo({ left: State.capIndex * scroller.clientWidth, behavior: "smooth" });
+      renderDots();
     };
-    panes.forEach((k, i) => {
-      const b = el("button", "cap-seg-btn", labels[k]);
-      b.onclick = () => goTo(i);
-      seg.appendChild(b);
-    });
-
-    content.appendChild(seg);
-    content.appendChild(scroller);
-    updateSeg();
+    renderDots();
 
     // Position initiale sur le bon volet (sans animation)
     requestAnimationFrame(() => { scroller.scrollLeft = State.capIndex * scroller.clientWidth; });
 
-    // Mise à jour du segment quand on swipe (scroll horizontal)
+    // Mise à jour de l'indicateur quand on swipe
     let st;
     scroller.onscroll = () => {
       clearTimeout(st);
       st = setTimeout(() => {
         const i = Math.round(scroller.scrollLeft / scroller.clientWidth);
-        if (i !== State.capIndex) { State.capIndex = i; updateSeg(); }
+        if (i !== State.capIndex) { State.capIndex = i; renderDots(); }
       }, 60);
     };
 
@@ -1145,52 +1153,6 @@
     if (sbDate) sbDate.textContent = now.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
   }
   tickClock(); setInterval(tickClock, 30000);
-
-  // ---------- Particules bleu foncé animées (fond) ----------
-  function initParticles() {
-    const canvas = $("#fx");
-    if (!canvas || !canvas.getContext) return;
-    if (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const ctx = canvas.getContext("2d");
-    let w = 0, h = 0, dpr = 1, parts = [];
-    const N = 32;
-
-    const resize = () => {
-      dpr = Math.min(window.devicePixelRatio || 1, 2);
-      w = canvas.clientWidth; h = canvas.clientHeight;
-      canvas.width = Math.max(1, w * dpr);
-      canvas.height = Math.max(1, h * dpr);
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    };
-    const make = () => {
-      parts = Array.from({ length: N }, () => ({
-        x: Math.random() * w, y: Math.random() * h,
-        r: 1 + Math.random() * 2.6,
-        vx: (Math.random() - 0.5) * 0.22,
-        vy: (Math.random() - 0.5) * 0.22,
-        a: 0.25 + Math.random() * 0.45,
-      }));
-    };
-    const tick = () => {
-      ctx.clearRect(0, 0, w, h);
-      for (const p of parts) {
-        p.x += p.vx; p.y += p.vy;
-        if (p.x < -6) p.x = w + 6; else if (p.x > w + 6) p.x = -6;
-        if (p.y < -6) p.y = h + 6; else if (p.y > h + 6) p.y = -6;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(40, 78, 190, ${p.a})`;
-        ctx.shadowColor = "rgba(40, 78, 190, 0.85)";
-        ctx.shadowBlur = 6;
-        ctx.fill();
-      }
-      ctx.shadowBlur = 0;
-      requestAnimationFrame(tick);
-    };
-    resize(); make(); tick();
-    window.addEventListener("resize", () => { resize(); make(); });
-  }
-  initParticles();
 
   render();
 })();

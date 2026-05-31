@@ -20,9 +20,10 @@
     scene: "home",          // "home" (springboard) | "app"
     tab: "notes",
     todoArchive: false,     // onglet To-Do : false = À faire, true = Terminées
+    showMore: false,        // fenêtre de commande : dévoiler "Voir les notes/To-Do"
     notes: Store.get("notes", []),
     todos: Store.get("todos", []),
-    searches: Store.get("searches", []),
+    requests: Store.get("requests", []),
   };
 
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -108,7 +109,7 @@
       t.classList.toggle("active", t.dataset.tab === State.tab));
     if (State.tab === "notes") renderNotes();
     if (State.tab === "todos") renderTodos();
-    if (State.tab === "searches") renderSearches();
+    if (State.tab === "space") renderSpace();
   }
 
   function emptyState(ico, title, msg) {
@@ -230,33 +231,49 @@
   }
 
   // ----- Searches (historique des recherches) -----
-  function renderSearches() {
+  // Statuts d'une demande de fonctionnalité personnalisée.
+  const STATUS = {
+    sent:  { label: "Envoyée",        icon: "📨", color: "var(--text2)" },
+    doing: { label: "En préparation", icon: "🛠️", color: "#ffd60a" },
+    ready: { label: "Prête à débloquer", icon: "🔓", color: "#0a84ff" },
+    paid:  { label: "Débloquée",      icon: "✅", color: "#30d158" },
+  };
+
+  function renderSpace() {
     content.innerHTML = "";
-    content.appendChild(el("div", "page-title", "Recherches"));
-    if (!State.searches.length) {
-      content.appendChild(emptyState("🔍", "Aucune recherche",
-        "Clique sur <b>Tap Back</b> puis 🔍 pour obtenir la définition ou l'explication d'un mot."));
+    content.appendChild(el("div", "page-title", "Mon espace"));
+
+    if (!State.requests.length) {
+      content.appendChild(emptyState("✨", "Ton espace est vide",
+        "Clique sur <b>Tap Back</b> puis ✨ <b>Mon espace</b> pour décrire la fonctionnalité que tu aimerais avoir rien que pour toi."));
       return;
     }
-    State.searches.forEach(s => {
+
+    State.requests.forEach(rq => {
+      const st = STATUS[rq.status] || STATUS.sent;
       const c = el("div", "card");
       const r = el("div", "row-flex");
-      const thumb = el("div", "thumb");
-      thumb.textContent = s.type === "Définition" ? "📖" : "💡";
+      const thumb = el("div", "thumb"); thumb.textContent = st.icon;
       const mid = el("div"); mid.style.flex = "1";
-      const preview = s.meanings ? (s.meanings[0]?.defs[0] || "") : (s.body || "");
-      mid.innerHTML = `<div class="row-title">${esc(s.term || s.query)}</div>` +
-        `<div class="row-sub">${esc(preview).slice(0, 120)}</div>` +
-        `<div class="tags">${s.type} · ${esc(s.source || "")}</div>`;
+      mid.innerHTML =
+        `<div class="row-title">${esc(rq.text).slice(0, 90)}</div>` +
+        `<div class="row-date">Envoyée : ${stamp(rq.createdAt)}</div>` +
+        `<div class="tags" style="color:${st.color}">${st.icon} ${st.label}` +
+        (rq.status === "ready" ? ` · prix : ${esc(rq.price || "4,99 €")}` : "") + `</div>`;
       const right = el("div");
       right.style.cssText = "display:flex;flex-direction:column;gap:6px;align-items:flex-end;";
-      if (s.url) {
-        const open = el("a", "linkbtn", "Ouvrir ↗");
-        open.href = s.url; open.target = "_blank";
-        right.appendChild(open);
+      if (rq.status === "ready") {
+        const pay = el("button", "chip", "Débloquer");
+        pay.onclick = () => {
+          rq.status = "paid";
+          Store.set("requests", State.requests);
+          render();
+          haptic();
+        };
+        right.appendChild(pay);
       }
       const del = el("button", "swipe-del", "🗑");
-      del.onclick = () => { State.searches = State.searches.filter(x => x.id !== s.id); Store.set("searches", State.searches); render(); };
+      del.onclick = () => { State.requests = State.requests.filter(x => x.id !== rq.id); Store.set("requests", State.requests); render(); };
       right.appendChild(del);
       r.append(thumb, mid, right);
       c.appendChild(r);
@@ -284,23 +301,30 @@
     if (!floating) return;
     const build = () => {
       floating.className = "floating";
-      floating.innerHTML = `
-        <button class="cmd-btn rec" data-act="voice"><span class="ci">🎙️</span><span>Note</span></button>
-        <button class="cmd-btn" data-act="todo"><span class="ci">✏️</span><span>To-Do</span></button>
-        <button class="cmd-btn" data-act="search"><span class="ci">🔍</span><span>Rechercher</span></button>
+      const openRow = State.showMore ? `
         <div class="cmd-open-row">
           <button class="cmd-btn wide" data-act="notes"><span class="ci">📓</span><span>Voir les notes</span></button>
           <button class="cmd-btn wide" data-act="todos"><span class="ci">✅</span><span>Voir To-Do</span></button>
-        </div>`;
+        </div>` : "";
+      floating.innerHTML = `
+        <button class="cmd-btn rec" data-act="voice"><span class="ci">🎙️</span><span>Note</span></button>
+        <button class="cmd-btn" data-act="todo"><span class="ci">✏️</span><span>To-Do</span></button>
+        <button class="cmd-btn" data-act="space"><span class="ci">✨</span><span>Mon espace</span></button>
+        <button class="cmd-more" id="cmdMore">${State.showMore ? "▴ Voir moins" : "▾ Voir plus"}</button>
+        ${openRow}`;
       floating.querySelectorAll(".cmd-btn").forEach(b =>
         b.onclick = () => {
           const act = b.dataset.act;
           if (act === "voice")  return openPanel("Note vocale", voicePanel);
           if (act === "todo")   return openPanel("To-Do", todoPanel);
-          if (act === "search") return openPanel("Rechercher", searchPanel);
+          if (act === "space")  return openPanel("Créer mon espace", spacePanel);
           if (act === "notes")  { hideOverlay(); setTimeout(showNotesList, 180); }
           if (act === "todos")  { hideOverlay(); setTimeout(showTodosList, 180); }
         });
+      $("#cmdMore", floating).onclick = () => {
+        State.showMore = !State.showMore;
+        renderChoices(true); // ré-affiche avec animation de hauteur
+      };
     };
     if (smooth) smoothSwap(floating, build); else build();
   }
@@ -549,98 +573,34 @@
     return d;
   }
 
-  // ----- Recherche : mot → définition / explication (dans la fenêtre) -----
-  function searchPanel(body) {
+  // ----- Mon espace : décrire une fonctionnalité sur-mesure (dans la fenêtre) -----
+  function spacePanel(body) {
     body.innerHTML = `
-      <div style="display:flex;gap:8px">
-        <input class="field" id="searchInput" placeholder="Un mot, une définition, une explication…" style="flex:1" autocomplete="off">
-        <button class="btn btn-primary" id="searchBtn" style="width:auto;padding:0 20px">🔍</button>
+      <div class="space-intro">
+        ✨ <b>Ton espace sur-mesure.</b><br>
+        Décris la fonctionnalité que tu rêverais d'avoir <b>rien que pour toi</b>.
+        Je reçois ton idée, je la développe, puis tu es prévenu(e) quand elle est
+        prête. Tu la débloques et elle apparaît ici, dans ton espace.
       </div>
-      <div id="searchResult"></div>`;
+      <textarea class="top-field" id="ideaText" rows="4" placeholder="Mon idée : j'aimerais une fonctionnalité qui…"></textarea>
+      <button class="btn btn-primary" id="ideaSend" style="margin-top:10px" disabled>Envoyer mon idée</button>
+      <div id="ideaDone"></div>`;
 
-    const input = $("#searchInput", body), btn = $("#searchBtn", body), out = $("#searchResult", body);
-    input.focus();
-
-    const run = async () => {
-      const q = input.value.trim();
-      if (!q) return;
-      out.innerHTML = `<div class="spinner"></div>`;
-      btn.disabled = true;
-      const res = await lookup(q);
-      btn.disabled = false;
-      if (!res) {
-        out.innerHTML = `<div class="card" style="margin-top:16px"><div class="row-title">Aucun résultat</div>
-          <div class="row-sub">Rien trouvé pour « ${esc(q)} ». Essaie un autre mot ou une orthographe différente.</div></div>`;
-        Haptics_warn();
-        return;
-      }
-      renderSearchResult(out, res);
-      // Historise dans l'onglet Recherches
-      State.searches.unshift({ id: uid(), createdAt: Date.now(), query: q, ...res });
-      Store.set("searches", State.searches);
+    const ta = $("#ideaText", body), send = $("#ideaSend", body), done = $("#ideaDone", body);
+    ta.focus();
+    ta.oninput = () => send.disabled = !ta.value.trim();
+    send.onclick = () => {
+      const text = ta.value.trim();
+      if (!text) return;
+      State.requests.unshift({ id: uid(), createdAt: Date.now(), text, status: "sent" });
+      Store.set("requests", State.requests);
+      State.tab = "space"; render();
+      ta.value = ""; send.disabled = true;
+      done.innerHTML = `<div class="card" style="margin-top:12px"><div class="row-title">Idée envoyée 📨</div>
+        <div class="row-sub">Tu la retrouveras dans l'onglet « Mon espace ». Tu seras prévenu(e) quand elle sera prête.</div></div>`;
       haptic();
     };
-
-    btn.onclick = run;
-    input.addEventListener("keydown", e => { if (e.key === "Enter") run(); });
   }
-
-  function renderSearchResult(out, res) {
-    const d = el("div", "search-result card");
-    let html = `<div class="sr-type">${res.type}</div><div class="sr-term">${esc(res.term)}</div>`;
-    if (res.meanings) {
-      res.meanings.forEach(m => {
-        if (m.pos) html += `<div class="sr-pos">${esc(m.pos)}</div>`;
-        m.defs.forEach((def, i) => html += `<div class="sr-def">${i + 1}. ${esc(def)}</div>`);
-      });
-    } else if (res.body) {
-      html += `<div class="sr-def" style="margin-top:10px">${esc(res.body)}</div>`;
-    }
-    if (res.source) {
-      html += `<div class="sr-source">Source : ${res.url ? `<a href="${res.url}" target="_blank">${res.source} ↗</a>` : esc(res.source)}</div>`;
-    }
-    d.innerHTML = html;
-    out.innerHTML = "";
-    out.appendChild(d);
-  }
-
-  /** Cherche une définition (dictionnaire FR) puis une explication (Wikipédia FR). */
-  async function lookup(query) {
-    // 1) Dictionnaire français — idéal pour un mot unique
-    try {
-      const r = await fetch("https://api.dictionaryapi.dev/api/v2/entries/fr/" + encodeURIComponent(query));
-      if (r.ok) {
-        const data = await r.json();
-        if (Array.isArray(data) && data[0] && data[0].meanings) {
-          const meanings = data[0].meanings.slice(0, 3).map(m => ({
-            pos: m.partOfSpeech || "",
-            defs: (m.definitions || []).slice(0, 3).map(d => d.definition).filter(Boolean)
-          })).filter(m => m.defs.length);
-          if (meanings.length) {
-            return { term: data[0].word || query, type: "Définition", meanings,
-                     source: "Wiktionnaire / dictionaryapi.dev" };
-          }
-        }
-      }
-    } catch {}
-
-    // 2) Wikipédia FR — explication pour un terme, une personne, un concept…
-    try {
-      const r = await fetch("https://fr.wikipedia.org/api/rest_v1/page/summary/" + encodeURIComponent(query),
-        { headers: { Accept: "application/json" } });
-      if (r.ok) {
-        const d = await r.json();
-        if (d.extract && d.type !== "disambiguation") {
-          return { term: d.title || query, type: "Explication", body: d.extract,
-                   source: "Wikipédia", url: d.content_urls && d.content_urls.desktop && d.content_urls.desktop.page };
-        }
-      }
-    } catch {}
-
-    return null;
-  }
-
-  function Haptics_warn() { if (navigator.vibrate) navigator.vibrate([10, 40, 10]); }
 
   // ---------- Haptics (vibration where supported) ----------
   function haptic() { if (navigator.vibrate) navigator.vibrate(8); }

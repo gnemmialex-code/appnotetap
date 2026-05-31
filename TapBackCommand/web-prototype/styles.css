@@ -304,6 +304,23 @@ main::-webkit-scrollbar { width: 0; }
 .cmd-btn .ci { font-size: 23px; }
 .cmd-btn.rec .ci { color: var(--record); }
 
+/* Bouton "Voir plus / Voir moins" */
+.cmd-more {
+  grid-column: 1 / -1;
+  border: none;
+  cursor: pointer;
+  background: transparent;
+  color: #6a6a72;
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 12.5px;
+  letter-spacing: .01em;
+  padding: 5px;
+  border-radius: 10px;
+  transition: background .15s;
+}
+.cmd-more:active { background: #ececf0; }
+
 /* Rangée des 2 boutons d'ouverture ("Voir les notes" + "Voir To-Do") */
 .cmd-open-row {
   grid-column: 1 / -1;
@@ -419,6 +436,17 @@ main::-webkit-scrollbar { width: 0; }
 .sheet .spinner, .floating.panel .spinner { border-color: #e3e3e8; border-top-color: #0a0a0c; }
 .sheet .chip, .floating.panel .chip { background: #e3e3e8; color: #0a0a0c; }
 .sheet .linkbtn, .floating.panel .linkbtn { color: #0a6cff; }
+
+/* Intro "Mon espace" */
+.space-intro {
+  background: #f6f6f8;
+  border-radius: 14px;
+  padding: 13px 14px;
+  margin-bottom: 12px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: #2a2a2e;
+}
 
 /* Search result block */
 .search-result { margin-top: 16px; }

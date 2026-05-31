@@ -109,6 +109,7 @@
   // RENDER
   // ============================================================
   const content = $("#content");
+  let _prevTab = null;
 
   function render() {
     document.querySelectorAll(".tab").forEach(t =>
@@ -118,6 +119,14 @@
     if (State.tab === "calendar") renderCalendar();
     if (State.tab === "carnet") renderCarnet();
     if (State.tab === "settings") renderSettings();
+
+    // Transition douce uniquement lors d'un changement d'onglet
+    if (State.tab !== _prevTab) {
+      content.classList.remove("page-enter");
+      void content.offsetWidth;       // redémarre l'animation
+      content.classList.add("page-enter");
+      _prevTab = State.tab;
+    }
   }
 
   function emptyState(ico, title, msg) {
@@ -1136,6 +1145,52 @@
     if (sbDate) sbDate.textContent = now.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
   }
   tickClock(); setInterval(tickClock, 30000);
+
+  // ---------- Particules bleu foncé animées (fond) ----------
+  function initParticles() {
+    const canvas = $("#fx");
+    if (!canvas || !canvas.getContext) return;
+    if (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const ctx = canvas.getContext("2d");
+    let w = 0, h = 0, dpr = 1, parts = [];
+    const N = 32;
+
+    const resize = () => {
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      w = canvas.clientWidth; h = canvas.clientHeight;
+      canvas.width = Math.max(1, w * dpr);
+      canvas.height = Math.max(1, h * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    const make = () => {
+      parts = Array.from({ length: N }, () => ({
+        x: Math.random() * w, y: Math.random() * h,
+        r: 1 + Math.random() * 2.6,
+        vx: (Math.random() - 0.5) * 0.22,
+        vy: (Math.random() - 0.5) * 0.22,
+        a: 0.25 + Math.random() * 0.45,
+      }));
+    };
+    const tick = () => {
+      ctx.clearRect(0, 0, w, h);
+      for (const p of parts) {
+        p.x += p.vx; p.y += p.vy;
+        if (p.x < -6) p.x = w + 6; else if (p.x > w + 6) p.x = -6;
+        if (p.y < -6) p.y = h + 6; else if (p.y > h + 6) p.y = -6;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(40, 78, 190, ${p.a})`;
+        ctx.shadowColor = "rgba(40, 78, 190, 0.85)";
+        ctx.shadowBlur = 6;
+        ctx.fill();
+      }
+      ctx.shadowBlur = 0;
+      requestAnimationFrame(tick);
+    };
+    resize(); make(); tick();
+    window.addEventListener("resize", () => { resize(); make(); });
+  }
+  initParticles();
 
   render();
 })();

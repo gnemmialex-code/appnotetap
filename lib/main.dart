@@ -8,19 +8,21 @@
 
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'bridge.dart';
-import 'demo_page.dart';
 import 'models.dart';
 import 'notifications.dart';
+import 'onboarding.dart';
 import 'store.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Notifications.init();
   await store.load();
+  initTapBackChannel();
   runApp(const TapBackApp());
 }
 
@@ -42,6 +44,11 @@ String formatStamp(DateTime d) {
   return '${d.day}/${d.month} $hm';
 }
 
+bool get _needsOnboarding =>
+    !kIsWeb &&
+    defaultTargetPlatform == TargetPlatform.iOS &&
+    !store.backTapSetupDone;
+
 class TapBackApp extends StatelessWidget {
   const TapBackApp({super.key});
 
@@ -60,9 +67,9 @@ class TapBackApp extends StatelessWidget {
       title: 'Shortist',
       debugShowCheckedModeBanner: false,
       theme: base,
-      initialRoute: '/',
+      initialRoute: _needsOnboarding ? '/onboarding' : '/app',
       routes: {
-        '/': (_) => const DemoPage(),
+        '/onboarding': (_) => const OnboardingScreen(),
         '/app': (_) => const HomePage(),
       },
     );

@@ -1,4 +1,18 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
-/// Trigger externe pour ouvrir le panneau Tap Back depuis la demo page.
 final tapBackTrigger = ValueNotifier<int>(0);
+
+const _channel = MethodChannel('com.gnemmialex.tapbacknote/tapback');
+
+void initTapBackChannel() {
+  _channel.setMethodCallHandler((call) async {
+    if (call.method == 'trigger') tapBackTrigger.value++;
+  });
+}
+
+Future<void> openAccessibilitySettings() async {
+  try {
+    await _channel.invokeMethod('openAccessibility');
+  } catch (_) {}
+}

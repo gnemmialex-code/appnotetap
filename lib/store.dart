@@ -13,6 +13,7 @@ class Store extends ChangeNotifier {
   static const _kEvents = 'tbc_events';
   static const _kCarnet = 'tbc_carnet';
   static const _kProfile = 'tbc_profile';
+  static const _kBackTapDone = 'tbc_back_tap_done';
 
   final List<Note> notes = [];
   final List<Todo> todos = [];
@@ -24,6 +25,8 @@ class Store extends ChangeNotifier {
   String profileName = '';
   String profileEmail = '';
   String? profileAvatarB64;
+
+  bool backTapSetupDone = false;
 
   bool _loaded = false;
   bool get loaded => _loaded;
@@ -52,8 +55,15 @@ class Store extends ChangeNotifier {
       profileEmail = m['email'] as String? ?? '';
       profileAvatarB64 = m['avatar'] as String?;
     }
+    backTapSetupDone = prefs.getBool(_kBackTapDone) ?? false;
     _loaded = true;
     notifyListeners();
+  }
+
+  Future<void> markBackTapSetupDone() async {
+    backTapSetupDone = true;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kBackTapDone, true);
   }
 
   static List<T> _decodeList<T>(String? raw, T Function(Map<String, dynamic>) f) {

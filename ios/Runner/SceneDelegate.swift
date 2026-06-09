@@ -3,34 +3,56 @@ import UIKit
 
 class SceneDelegate: FlutterSceneDelegate {
 
-  // Cold start — URL reçue avant que Flutter soit prêt (délai 0.5 s)
+  private weak var mainScene: UIScene?
+
+  // MARK: - Lifecycle
+
   override func scene(
     _ scene: UIScene,
     willConnectTo session: UISceneSession,
     options connectionOptions: UIScene.ConnectionOptions
   ) {
     super.scene(scene, willConnectTo: session, options: connectionOptions)
+    mainScene = scene
+
+    // Écoute les triggers AppIntent (iOS 16+) et URL scheme
+    NotificationCenter.default.addObserver(
+      forName: .shortistTapTrigger,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      UserDefaults.standard.removeObject(forKey: "shortist_tap_pending")
+      self?.fireTrigger(delay: 0.1)
+    }
+
+    // Cold start via URL scheme (shortist://tapback)
     if let url = connectionOptions.urlContexts.first?.url {
-      handleURL(url, scene: scene, delay: 0.5)
+      handleURL(url, delay: 0.5)
     }
   }
 
-  // Warm resume — app déjà en mémoire
+  // Warm resume via URL scheme
   override func scene(
     _ scene: UIScene,
     openURLContexts URLContexts: Set<UIOpenURLContext>
   ) {
     super.scene(scene, openURLContexts: URLContexts)
     if let url = URLContexts.first?.url {
-      handleURL(url, scene: scene, delay: 0)
+      handleURL(url, delay: 0)
     }
   }
 
-  private func handleURL(_ url: URL, scene: UIScene, delay: TimeInterval) {
+  // MARK: - Helpers
+
+  private func handleURL(_ url: URL, delay: TimeInterval) {
     guard url.scheme == "shortist", url.host == "tapback" else { return }
-    DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak scene] in
+    fireTrigger(delay: delay)
+  }
+
+  private func fireTrigger(delay: TimeInterval) {
+    DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
       guard
-        let windowScene = scene as? UIWindowScene,
+        let windowScene = self?.mainScene as? UIWindowScene,
         let controller = windowScene.windows.first?.rootViewController as? FlutterViewController
       else { return }
       FlutterMethodChannel(

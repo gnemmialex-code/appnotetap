@@ -160,16 +160,6 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
           ),
-          floatingActionButton: PressPop(
-            child: FloatingActionButton.extended(
-              onPressed: _openCommand,
-              backgroundColor: Colors.white,
-              foregroundColor: Colors.black,
-              icon: const Icon(Icons.bolt),
-              label: const Text('Tap Back',
-                  style: TextStyle(fontWeight: FontWeight.w700)),
-            ),
-          ),
           bottomNavigationBar: NavigationBar(
             selectedIndex: _tab,
             onDestinationSelected: (i) => setState(() => _tab = i),

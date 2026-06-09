@@ -9,6 +9,8 @@ void initTapBackChannel() {
   _channel.setMethodCallHandler((call) async {
     if (call.method == 'trigger') tapBackTrigger.value++;
   });
+  // Récupère un trigger qui aurait eu lieu avant que Flutter soit prêt (cold start)
+  _channel.invokeMethod('checkPendingTrigger').ignore();
 }
 
 Future<void> openAccessibilitySettings() async {

@@ -11,11 +11,11 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import 'bridge.dart';
+import 'demo_page.dart';
 import 'models.dart';
 import 'notifications.dart';
 import 'store.dart';
-
-final store = Store();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -60,7 +60,11 @@ class TapBackApp extends StatelessWidget {
       title: 'Shortist',
       debugShowCheckedModeBanner: false,
       theme: base,
-      home: const HomePage(),
+      initialRoute: '/',
+      routes: {
+        '/': (_) => const DemoPage(),
+        '/app': (_) => const HomePage(),
+      },
     );
   }
 }
@@ -74,6 +78,22 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   int _tab = 0;          // 0 = Capture (Notes/To-Do/À lire), 1 = Agenda, 2 = Carnet, 3 = Réglages
   int _captureSub = 0;   // sous-onglet du hub Capture
+
+  @override
+  void initState() {
+    super.initState();
+    tapBackTrigger.addListener(_onExternalTrigger);
+  }
+
+  void _onExternalTrigger() {
+    if (mounted) _openCommand();
+  }
+
+  @override
+  void dispose() {
+    tapBackTrigger.removeListener(_onExternalTrigger);
+    super.dispose();
+  }
 
   void _openCommand() {
     showGeneralDialog(

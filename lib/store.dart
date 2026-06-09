@@ -165,3 +165,6 @@ class Store extends ChangeNotifier {
         }));
   }
 }
+
+/// Instance globale partagée par toute l'application (main.dart + demo_page.dart).
+final store = Store();

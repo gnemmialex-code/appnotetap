@@ -28,12 +28,34 @@
     </array>
 
     <!-- Make App Intents / Shortcuts available. -->
+    <!-- Ajoutez OpenQuickNoteIntent ici pour l'exposer à Siri / Raccourcis. -->
     <key>NSUserActivityTypes</key>
     <array>
         <string>OpenTapBackCommandIntent</string>
         <string>StartVoiceNoteIntent</string>
         <string>QuickTodoIntent</string>
         <string>SmartCaptureIntent</string>
+        <string>OpenQuickNoteIntent</string>
+    </array>
+
+    <!--
+        URL scheme fallback : tapbackcommand://openQuickNote
+        Aucun entitlement spécial n'est requis pour un URL scheme custom.
+        Background Modes n'est pas nécessaire pour ce scheme.
+        NSUserActivityTypes (ci-dessus) est utile pour que Siri/Raccourcis
+        pré-indexe les intents même sans lancement récent de l'app.
+    -->
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <!-- Remplacez com.gnemmialex.tapbacknote par votre bundle id réel si différent. -->
+            <key>CFBundleURLName</key>
+            <string>com.gnemmialex.tapbacknote</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>tapbackcommand</string>
+            </array>
+        </dict>
     </array>
 </dict>
 </plist>

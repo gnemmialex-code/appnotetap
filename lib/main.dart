@@ -993,6 +993,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 18),
+          // --- Section Tap Back ---
+          const Padding(
+            padding: EdgeInsets.fromLTRB(4, 0, 4, 8),
+            child: Text('Tap Back',
+                style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: _textSecondary)),
+          ),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: _card,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.touch_app_outlined, color: Colors.white70, size: 20),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Fenêtre de commande rapide',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Ouvre la mini-fenêtre Shortist comme si tu tapotais l\'arrière de ton iPhone. Pratique pour tester sans configurer Back Tap.',
+                  style: TextStyle(fontSize: 13, color: _textSecondary, height: 1.5),
+                ),
+                const SizedBox(height: 14),
+                PressPop(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                      minimumSize: const Size.fromHeight(48),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                    ),
+                    icon: const Icon(Icons.smart_button_outlined, size: 20),
+                    label: const Text('Tester Tap Back',
+                        style: TextStyle(fontWeight: FontWeight.w700)),
+                    onPressed: () => tapBackTrigger.value++,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
           const Padding(
             padding: EdgeInsets.fromLTRB(4, 0, 4, 8),
             child: Text('Informations & documents',

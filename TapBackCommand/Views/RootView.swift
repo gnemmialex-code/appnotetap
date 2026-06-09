@@ -16,6 +16,10 @@ struct RootView: View {
     @EnvironmentObject private var todoVM: TodoViewModel
     @EnvironmentObject private var captureVM: CaptureViewModel
 
+    // Source de vérité pour FloatingQuickNoteView (Back Tap / OpenQuickNoteIntent).
+    // Singleton observé directement — pas besoin de passer par l'environment.
+    @ObservedObject private var quickNoteManager = QuickNoteManager.shared
+
     // Sheets opened from the floating panel.
     @State private var activeAction: QuickAction?
 
@@ -38,7 +42,9 @@ struct RootView: View {
             }
             .tint(.white)
 
-            // Floating command overlay.
+            // ── Overlay 1 : FloatingCommandView (AppIntents existants) ──────
+            // Piloté par AppRouter.showFloatingCommand.
+            // Déclenché par OpenTapBackCommandIntent, StartVoiceNoteIntent, etc.
             if router.showFloatingCommand {
                 FloatingCommandView { action in
                     router.dismissFloatingCommand()
@@ -53,6 +59,18 @@ struct RootView: View {
                 .padding(.top, Constants.Layout.topInset)
                 .transition(.move(edge: .top).combined(with: .opacity))
                 .zIndex(10)
+            }
+
+            // ── Overlay 2 : FloatingQuickNoteView (OpenQuickNoteIntent) ────
+            // Piloté par QuickNoteManager.shared.isPresented.
+            // Déclenché par OpenQuickNoteIntent (Back Tap) ou URL scheme
+            // tapbackcommand://openQuickNote.
+            // zIndex 20 : au-dessus de FloatingCommandView (zIndex 10).
+            if quickNoteManager.isPresented {
+                FloatingQuickNoteView()
+                    .zIndex(20)
+                    // Pas de .transition ici : FloatingQuickNoteView gère
+                    // sa propre animation slide-down via @State appeared.
             }
         }
         // Route a pending action from an App Intent (e.g. straight to record).

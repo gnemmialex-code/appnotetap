@@ -164,15 +164,35 @@ class _PanelScreenState extends State<PanelScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          // iOS ne permet pas de voir le vrai écran d'accueil derrière une
-          // app : on affiche un accueil simulé (statique), flouté et
-          // légèrement assombri pour mettre la fenêtre en avant.
-          const _FakeHomeBackground(),
-          CommandPanel(key: ValueKey(_panelGeneration)),
-        ],
+      body: ListenableBuilder(
+        listenable: store,
+        builder: (context, _) {
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              // iOS ne permet pas de voir le vrai écran d'accueil derrière
+              // une app. Si l'utilisateur a fourni une capture de SON écran
+              // d'accueil (Réglages), on l'affiche : rendu identique à de la
+              // transparence. Sinon, accueil simulé par défaut.
+              if (store.panelWallpaperB64 != null)
+                Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Image.memory(
+                      base64Decode(store.panelWallpaperB64!),
+                      fit: BoxFit.cover,
+                      gaplessPlayback: true,
+                    ),
+                    // Léger voile pour faire ressortir la fenêtre blanche.
+                    Container(color: Colors.black.withValues(alpha: 0.22)),
+                  ],
+                )
+              else
+                const _FakeHomeBackground(),
+              CommandPanel(key: ValueKey(_panelGeneration)),
+            ],
+          );
+        },
       ),
     );
   }
@@ -1410,6 +1430,89 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     onPressed: () => tapBackTrigger.value++,
                   ),
                 ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          // Fond affiché derrière la fenêtre rapide
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: _card,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.wallpaper_outlined,
+                        color: _textPrimary, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Fond derrière la fenêtre',
+                        style: GoogleFonts.montserrat(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: _textPrimary),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'iOS ne permet pas d\'afficher le vrai écran d\'accueil derrière une app. '
+                  'Astuce : fais une capture d\'écran de TON écran d\'accueil, puis choisis-la ici. '
+                  'Le rendu sera identique à ton iPhone.',
+                  style: GoogleFonts.montserrat(
+                      fontSize: 13, color: _textSecondary, height: 1.5),
+                ),
+                const SizedBox(height: 14),
+                PressPop(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _textPrimary,
+                      side: const BorderSide(color: _border),
+                      minimumSize: const Size.fromHeight(50),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16)),
+                    ),
+                    icon: const Icon(Icons.add_photo_alternate_outlined,
+                        size: 20),
+                    label: Text(
+                        store.panelWallpaperB64 == null
+                            ? 'Choisir ma capture d\'écran'
+                            : 'Capture définie ✓ — changer',
+                        style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w600)),
+                    onPressed: () async {
+                      final picked = await ImagePicker().pickImage(
+                          source: ImageSource.gallery,
+                          maxWidth: 1500,
+                          imageQuality: 85);
+                      if (picked == null) return;
+                      final bytes = await picked.readAsBytes();
+                      await store.savePanelWallpaper(base64Encode(bytes));
+                      if (mounted) setState(() {});
+                    },
+                  ),
+                ),
+                if (store.panelWallpaperB64 != null) ...[
+                  const SizedBox(height: 8),
+                  PressPop(
+                    child: TextButton(
+                      style: TextButton.styleFrom(
+                        foregroundColor: _textSecondary,
+                        minimumSize: const Size.fromHeight(40),
+                      ),
+                      onPressed: () async {
+                        await store.savePanelWallpaper(null);
+                        if (mounted) setState(() {});
+                      },
+                      child: Text('Retirer la capture',
+                          style: GoogleFonts.montserrat(
+                              fontSize: 13, fontWeight: FontWeight.w500)),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

@@ -14,6 +14,7 @@ class Store extends ChangeNotifier {
   static const _kCarnet = 'tbc_carnet';
   static const _kProfile = 'tbc_profile';
   static const _kBackTapDone = 'tbc_back_tap_done';
+  static const _kPanelWallpaper = 'tbc_panel_wallpaper';
 
   final List<Note> notes = [];
   final List<Todo> todos = [];
@@ -27,6 +28,10 @@ class Store extends ChangeNotifier {
   String? profileAvatarB64;
 
   bool backTapSetupDone = false;
+
+  /// Capture d'écran de l'accueil de l'utilisateur, affichée derrière la
+  /// fenêtre rapide (iOS ne permet pas un vrai fond transparent).
+  String? panelWallpaperB64;
 
   bool _loaded = false;
   bool get loaded => _loaded;
@@ -56,8 +61,23 @@ class Store extends ChangeNotifier {
       profileAvatarB64 = m['avatar'] as String?;
     }
     backTapSetupDone = prefs.getBool(_kBackTapDone) ?? false;
+    final wp = prefs.getString(_kPanelWallpaper);
+    panelWallpaperB64 = (wp != null && wp.isNotEmpty) ? wp : null;
     _loaded = true;
     notifyListeners();
+  }
+
+  /// Enregistre (ou retire si `null`) la capture d'écran utilisée comme
+  /// fond derrière la fenêtre rapide.
+  Future<void> savePanelWallpaper(String? b64) async {
+    panelWallpaperB64 = b64;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    if (b64 == null) {
+      await prefs.remove(_kPanelWallpaper);
+    } else {
+      await prefs.setString(_kPanelWallpaper, b64);
+    }
   }
 
   Future<void> markBackTapSetupDone() async {

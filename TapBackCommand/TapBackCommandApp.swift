@@ -36,6 +36,13 @@ struct TapBackCommandApp: App {
     //     d'un cold start URL serait perdue avant que le manager ne s'abonne.
     @StateObject private var quickNoteManager = QuickNoteManager.shared
 
+    // Initialise PremiumManager au démarrage :
+    //   1. son init lit le cache UserDefaults → l'UI connaît l'état premium
+    //      dès la frame 0 (pas de flash du paywall) ;
+    //   2. StoreManager.shared est créé en cascade → le listener de
+    //      transactions StoreKit 2 démarre immédiatement (recommandé Apple).
+    @StateObject private var premiumManager = PremiumManager.shared
+
     var body: some Scene {
         WindowGroup {
             RootView()
@@ -43,11 +50,18 @@ struct TapBackCommandApp: App {
                 .environmentObject(notesVM)
                 .environmentObject(todoVM)
                 .environmentObject(captureVM)
+                .environmentObject(premiumManager)
                 .preferredColorScheme(.dark)
                 // ── URL scheme fallback ────────────────────────────────────
                 // Gère tapbackcommand://openQuickNote (raccourci "Ouvrir URL"
                 // dans Raccourcis, deep link externe, ou iOS < 16 sans AppIntents).
                 .onOpenURL { handleIncomingURL($0) }
+                // ── Revalidation premium au lancement ──────────────────────
+                // Interroge Transaction.currentEntitlements (StoreKit 2) pour
+                // confirmer/invalider l'état premium mis en cache : gère
+                // l'abonnement expiré, le remboursement, ou l'achat fait sur
+                // un autre appareil avec le même compte.
+                .task { await premiumManager.refreshAtLaunch() }
         }
     }
 

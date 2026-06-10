@@ -1,6 +1,7 @@
 // TapBack Note — application Flutter.
 // Thème blanc et gris clair, police Montserrat, boutons arrondis avec ombre.
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -115,127 +116,180 @@ class TapBackApp extends StatelessWidget {
       initialRoute: _needsOnboarding ? '/onboarding' : '/app',
       routes: {
         '/onboarding': (_) => const OnboardingScreen(),
-        '/app': (_) => const HomePage(),
+        // L'écran racine est la petite fenêtre rapide : l'accueil complet
+        // (HomePage) n'est accessible que via le bouton flèche du panneau.
+        '/app': (_) => const PanelScreen(),
       },
+    );
+  }
+}
+
+// ============================================================
+// Écran racine : la petite fenêtre rapide, seule visible.
+// Le reste de l'écran est neutre (sombre) — l'accueil complet de
+// l'app ne s'ouvre que via le bouton flèche du panneau.
+// ============================================================
+
+class PanelScreen extends StatefulWidget {
+  const PanelScreen({super.key});
+  @override
+  State<PanelScreen> createState() => _PanelScreenState();
+}
+
+class _PanelScreenState extends State<PanelScreen> {
+  // Changer la clé recrée le panneau (retour au menu de choix).
+  int _panelGeneration = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    tapBackTrigger.addListener(_onTapBack);
+  }
+
+  @override
+  void dispose() {
+    tapBackTrigger.removeListener(_onTapBack);
+    super.dispose();
+  }
+
+  void _onTapBack() {
+    if (!mounted) return;
+    // Si l'accueil de l'app (ou autre) est ouvert, on revient au panneau,
+    // et on remet le panneau sur l'écran de choix.
+    Navigator.of(context).popUntil((r) => r.isFirst);
+    setState(() => _panelGeneration++);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0D0D13),
+      body: CommandPanel(key: ValueKey(_panelGeneration)),
     );
   }
 }
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  final int initialTab; // 0 = Capture, 1 = Agenda, 2 = Carnet, 3 = Réglages
+  final int initialSub; // sous-onglet Capture : 0 Notes, 1 To-Do, 2 À lire
+  const HomePage({super.key, this.initialTab = 0, this.initialSub = 0});
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
-  int _tab = 0;       // 0 = Capture, 1 = Agenda, 2 = Carnet, 3 = Réglages
-  int _captureSub = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    tapBackTrigger.addListener(_onExternalTrigger);
-  }
-
-  void _onExternalTrigger() {
-    if (mounted) _openCommand();
-  }
-
-  @override
-  void dispose() {
-    tapBackTrigger.removeListener(_onExternalTrigger);
-    super.dispose();
-  }
-
-  void _openCommand() {
-    showGeneralDialog(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: 'Fermer',
-      barrierColor: Colors.black54,
-      transitionDuration: const Duration(milliseconds: 300),
-      pageBuilder: (_, _, _) => CommandPanel(
-        onOpenTab: (i) => setState(() {
-          _tab = 0;
-          _captureSub = i;
-        }),
-      ),
-      transitionBuilder: (ctx, anim, _, child) {
-        final curved = CurvedAnimation(parent: anim, curve: Curves.easeOutCubic);
-        return SlideTransition(
-          position: Tween<Offset>(begin: const Offset(0, -1), end: Offset.zero)
-              .animate(curved),
-          child: FadeTransition(opacity: curved, child: child),
-        );
-      },
-    );
-  }
+  late int _tab = widget.initialTab;
+  late final int _captureSub = widget.initialSub;
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: store,
       builder: (context, _) {
-        final screens = [
-          CaptureHub(sub: _captureSub),
-          const AgendaScreen(),
-          const CarnetScreen(),
-          const SettingsScreen(),
-        ];
         return Scaffold(
           body: SafeArea(
             bottom: false,
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 300),
-              switchInCurve: Curves.easeOutCubic,
-              switchOutCurve: Curves.easeInCubic,
-              transitionBuilder: (child, anim) => FadeTransition(
-                opacity: anim,
-                child: SlideTransition(
-                  position: Tween<Offset>(
-                          begin: const Offset(0.05, 0), end: Offset.zero)
-                      .animate(anim),
-                  child: child,
+            child: Column(
+              children: [
+                // Retour vers la fenêtre rapide (écran racine).
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+                    child: PressPop(
+                      child: GestureDetector(
+                        onTap: () => Navigator.of(context)
+                            .popUntil((r) => r.isFirst),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: _surfaceStrong,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.chevron_left,
+                                  size: 18, color: _textPrimary),
+                              Text('Fenêtre rapide',
+                                  style: GoogleFonts.montserrat(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: _textPrimary)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-              child: KeyedSubtree(
-                key: ValueKey(_tab),
-                child: screens[_tab],
-              ),
-            ),
-          ),
-          bottomNavigationBar: Container(
-            decoration: BoxDecoration(
-              color: _surface,
-              border: Border(top: BorderSide(color: _border, width: 1)),
-            ),
-            child: NavigationBar(
-              selectedIndex: _tab,
-              onDestinationSelected: (i) => setState(() => _tab = i),
-              labelBehavior:
-                  NavigationDestinationLabelBehavior.onlyShowSelected,
-              destinations: const [
-                NavigationDestination(
-                    icon: Icon(Icons.dynamic_feed_outlined),
-                    selectedIcon: Icon(Icons.dynamic_feed),
-                    label: 'Capture'),
-                NavigationDestination(
-                    icon: Icon(Icons.event_outlined),
-                    selectedIcon: Icon(Icons.event),
-                    label: 'Agenda'),
-                NavigationDestination(
-                    icon: Icon(Icons.menu_book_outlined),
-                    selectedIcon: Icon(Icons.menu_book),
-                    label: 'Carnet'),
-                NavigationDestination(
-                    icon: Icon(Icons.settings_outlined),
-                    selectedIcon: Icon(Icons.settings),
-                    label: 'Réglages'),
+                Expanded(child: _body()),
               ],
             ),
           ),
+          bottomNavigationBar: _navBar(),
         );
       },
+    );
+  }
+
+  Widget _body() {
+    final screens = [
+      CaptureHub(sub: _captureSub),
+      const AgendaScreen(),
+      const CarnetScreen(),
+      const SettingsScreen(),
+    ];
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 300),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, anim) => FadeTransition(
+        opacity: anim,
+        child: SlideTransition(
+          position: Tween<Offset>(
+                  begin: const Offset(0.05, 0), end: Offset.zero)
+              .animate(anim),
+          child: child,
+        ),
+      ),
+      child: KeyedSubtree(
+        key: ValueKey(_tab),
+        child: screens[_tab],
+      ),
+    );
+  }
+
+  Widget _navBar() {
+    return Container(
+      decoration: BoxDecoration(
+        color: _surface,
+        border: Border(top: BorderSide(color: _border, width: 1)),
+      ),
+      child: NavigationBar(
+        selectedIndex: _tab,
+        onDestinationSelected: (i) => setState(() => _tab = i),
+        labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
+        destinations: const [
+          NavigationDestination(
+              icon: Icon(Icons.dynamic_feed_outlined),
+              selectedIcon: Icon(Icons.dynamic_feed),
+              label: 'Capture'),
+          NavigationDestination(
+              icon: Icon(Icons.event_outlined),
+              selectedIcon: Icon(Icons.event),
+              label: 'Agenda'),
+          NavigationDestination(
+              icon: Icon(Icons.menu_book_outlined),
+              selectedIcon: Icon(Icons.menu_book),
+              label: 'Carnet'),
+          NavigationDestination(
+              icon: Icon(Icons.settings_outlined),
+              selectedIcon: Icon(Icons.settings),
+              label: 'Réglages'),
+        ],
+      ),
     );
   }
 }
@@ -473,6 +527,39 @@ class _TodosScreenState extends State<TodosScreen> {
       : const _Empty(Icons.checklist, 'Aucune tâche',
           'Touche « Tap Back » puis To-Do pour ajouter une tâche.');
 
+  /// Feuille d'édition : modifier le texte et ajouter/compléter
+  /// la description d'une tâche.
+  void _editTodo(Todo t) {
+    final text = TextEditingController(text: t.text);
+    final desc = TextEditingController(text: t.description);
+    _showSheet(context, 'Modifier la tâche', (setSheet) {
+      return [
+        _sheetField(text, 'Tâche…'),
+        const SizedBox(height: 8),
+        _sheetField(desc, 'Description (optionnel)…', maxLines: 4),
+        const SizedBox(height: 14),
+        _sheetPrimary('Enregistrer', () {
+          store.updateTodo(t.id,
+              text: text.text.trim(), description: desc.text.trim());
+          Navigator.of(context).pop();
+        }),
+      ];
+    });
+  }
+
+  Widget _description(Todo t) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Text(
+        t.description,
+        maxLines: 3,
+        overflow: TextOverflow.ellipsis,
+        style: GoogleFonts.montserrat(
+            fontSize: 12, color: _textSecondary, height: 1.4),
+      ),
+    );
+  }
+
   Widget _activeTile(Todo t) {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -488,25 +575,30 @@ class _TodosScreenState extends State<TodosScreen> {
             onPressed: () => store.toggleTodo(t.id),
           ),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  t.text,
-                  style: GoogleFonts.montserrat(
-                    fontSize: 15,
-                    decoration:
-                        t.done ? TextDecoration.lineThrough : null,
-                    color: t.done
-                        ? const Color(0xFFBBBBCC)
-                        : _textPrimary,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _editTodo(t),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    t.text,
+                    style: GoogleFonts.montserrat(
+                      fontSize: 15,
+                      decoration:
+                          t.done ? TextDecoration.lineThrough : null,
+                      color: t.done
+                          ? const Color(0xFFBBBBCC)
+                          : _textPrimary,
+                    ),
                   ),
-                ),
-                if (t.done)
-                  Text('Fait · retiré de la liste dans 24 h',
-                      style: GoogleFonts.montserrat(
-                          fontSize: 11, color: _textSecondary)),
-              ],
+                  if (t.description.isNotEmpty) _description(t),
+                  if (t.done)
+                    Text('Fait · retiré de la liste dans 24 h',
+                        style: GoogleFonts.montserrat(
+                            fontSize: 11, color: _textSecondary)),
+                ],
+              ),
             ),
           ),
           IconButton(
@@ -532,24 +624,29 @@ class _TodosScreenState extends State<TodosScreen> {
             child: Icon(Icons.check_circle, color: Colors.green, size: 20),
           ),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(t.text,
-                    style: GoogleFonts.montserrat(
-                        color: _textSecondary,
-                        decoration: TextDecoration.lineThrough)),
-                const SizedBox(height: 4),
-                Text('Créée : ${formatStamp(t.createdAt)}',
-                    style: GoogleFonts.montserrat(
-                        fontSize: 11,
-                        color: const Color(0xFFBBBBCC))),
-                if (t.doneAt != null)
-                  Text('Faite : ${formatStamp(t.doneAt!)}',
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _editTodo(t),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(t.text,
+                      style: GoogleFonts.montserrat(
+                          color: _textSecondary,
+                          decoration: TextDecoration.lineThrough)),
+                  if (t.description.isNotEmpty) _description(t),
+                  const SizedBox(height: 4),
+                  Text('Créée : ${formatStamp(t.createdAt)}',
                       style: GoogleFonts.montserrat(
                           fontSize: 11,
-                          color: Colors.green.shade600)),
-              ],
+                          color: const Color(0xFFBBBBCC))),
+                  if (t.doneAt != null)
+                    Text('Faite : ${formatStamp(t.doneAt!)}',
+                        style: GoogleFonts.montserrat(
+                            fontSize: 11,
+                            color: Colors.green.shade600)),
+                ],
+              ),
             ),
           ),
           IconButton(
@@ -1388,8 +1485,7 @@ class _DateTimeRow extends StatelessWidget {
 enum _Mode { choices, note, todo, reading }
 
 class CommandPanel extends StatefulWidget {
-  final void Function(int index) onOpenTab;
-  const CommandPanel({super.key, required this.onOpenTab});
+  const CommandPanel({super.key});
   @override
   State<CommandPanel> createState() => _CommandPanelState();
 }
@@ -1400,11 +1496,24 @@ class _CommandPanelState extends State<CommandPanel> {
   final _noteTitle = TextEditingController();
   final _noteBody = TextEditingController();
   final _todoText = TextEditingController();
+  final _todoDesc = TextEditingController();
   final List<TextEditingController> _readControllers = [
     TextEditingController()
   ];
   String _remindKey = '';
   DateTime? _customDateTime;
+
+  // Rafraîchit la liste des tâches chaque minute pour faire disparaître
+  // celles cochées depuis plus de 30 min.
+  Timer? _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
 
   static const _remindOptions = [
     ('1h', 'Dans 1 h'),
@@ -1417,48 +1526,85 @@ class _CommandPanelState extends State<CommandPanel> {
 
   @override
   void dispose() {
+    _ticker?.cancel();
     _noteTitle.dispose();
     _noteBody.dispose();
     _todoText.dispose();
+    _todoDesc.dispose();
     for (final c in _readControllers) {
       c.dispose();
     }
     super.dispose();
   }
 
-  void _close() => Navigator.of(context).pop();
+  /// Ferme la fenêtre rapide : l'app retourne en arrière-plan
+  /// (écran d'accueil de l'iPhone) et le panneau revient au menu.
+  void _close() {
+    FocusScope.of(context).unfocus();
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+      minimizeApp();
+    }
+    setState(() {
+      _mode = _Mode.choices;
+      _noteTitle.clear();
+      _noteBody.clear();
+      _todoText.clear();
+      _todoDesc.clear();
+    });
+  }
+
+  /// Seule porte d'entrée vers l'accueil complet de l'app.
+  void _openApp({int tab = 0, int sub = 0}) {
+    FocusScope.of(context).unfocus();
+    setState(() => _mode = _Mode.choices);
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => HomePage(initialTab: tab, initialSub: sub),
+    ));
+  }
 
   @override
   Widget build(BuildContext context) {
     return SafeArea(
       child: Align(
         alignment: Alignment.topCenter,
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-          child: Material(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(26),
-            elevation: 0,
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(26),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.12),
-                    blurRadius: 30,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: AnimatedSize(
-                  duration: const Duration(milliseconds: 280),
-                  curve: Curves.easeOutCubic,
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 220),
-                    child: _buildMode(),
+          // Entrée en glissant depuis le haut (le panneau est recréé à
+          // chaque tap-back via sa clé, donc l'animation rejoue).
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: 1),
+            duration: const Duration(milliseconds: 320),
+            curve: Curves.easeOutCubic,
+            builder: (context, v, child) => Opacity(
+              opacity: v,
+              child: Transform.translate(
+                  offset: Offset(0, (1 - v) * -60), child: child),
+            ),
+            child: Material(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(26),
+              elevation: 0,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(26),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.12),
+                      blurRadius: 30,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: AnimatedSize(
+                    duration: const Duration(milliseconds: 280),
+                    curve: Curves.easeOutCubic,
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 220),
+                      child: _buildMode(),
+                    ),
                   ),
                 ),
               ),
@@ -1489,12 +1635,35 @@ class _CommandPanelState extends State<CommandPanel> {
       children: [
         Padding(
           padding: const EdgeInsets.only(bottom: 10),
-          child: Text('Shortist',
-              style: GoogleFonts.montserrat(
-                  color: Colors.black,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.2)),
+          child: Row(
+            children: [
+              const SizedBox(width: 34),
+              Expanded(
+                child: Center(
+                  child: Text('Shortist',
+                      style: GoogleFonts.montserrat(
+                          color: Colors.black,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.2)),
+                ),
+              ),
+              InkWell(
+                onTap: _close,
+                borderRadius: BorderRadius.circular(11),
+                child: Container(
+                  width: 34,
+                  height: 34,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0F0F3),
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  child: const Icon(Icons.close, size: 18, color: Colors.black),
+                ),
+              ),
+            ],
+          ),
         ),
         Row(
           children: [
@@ -1512,19 +1681,34 @@ class _CommandPanelState extends State<CommandPanel> {
         Row(
           children: [
             Expanded(
-              child: _cmdWide(Icons.menu_book, 'Voir les notes', () {
-                widget.onOpenTab(0);
-                _close();
-              }),
+              child: _cmdWide(Icons.menu_book, 'Voir les notes',
+                  () => _openApp(sub: 0)),
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: _cmdWide(Icons.checklist, 'Voir To-Do', () {
-                widget.onOpenTab(1);
-                _close();
-              }),
+              child: _cmdWide(Icons.checklist, 'Voir To-Do',
+                  () => _openApp(sub: 1)),
             ),
           ],
+        ),
+        const SizedBox(height: 8),
+        // Seul accès vers l'accueil complet de l'application.
+        _PanelButton(
+          onTap: () => _openApp(),
+          filledDark: true,
+          padding: const EdgeInsets.symmetric(vertical: 13),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text('Ouvrir l\'application',
+                  style: GoogleFonts.montserrat(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14)),
+              const SizedBox(width: 8),
+              const Icon(Icons.arrow_forward, size: 18, color: Colors.white),
+            ],
+          ),
         ),
       ],
     );
@@ -1617,7 +1801,6 @@ class _CommandPanelState extends State<CommandPanel> {
             title: title.isEmpty ? 'Note' : title,
             body: body,
           ));
-          widget.onOpenTab(0);
           _close();
         }),
       ],
@@ -1625,23 +1808,88 @@ class _CommandPanelState extends State<CommandPanel> {
   }
 
   Widget _todoPanel() {
-    return Column(
+    return ListenableBuilder(
       key: const ValueKey('todo'),
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _head('To-Do'),
-        const SizedBox(height: 10),
-        _field(_todoText, 'Nouvelle tâche…', autofocus: true, maxLines: 2),
-        const SizedBox(height: 10),
-        _primary('Ajouter', () {
-          final text = _todoText.text.trim();
-          if (text.isEmpty) return;
-          store.addTodo(
-              Todo(id: _uid(), createdAt: DateTime.now(), text: text));
-          _close();
-        }),
-      ],
+      listenable: store,
+      builder: (context, _) {
+        final recent = store.quickPanelTodos;
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _head('To-Do'),
+            const SizedBox(height: 10),
+            _field(_todoText, 'Nouvelle tâche…', autofocus: true),
+            const SizedBox(height: 8),
+            _field(_todoDesc, 'Description (optionnel)…'),
+            const SizedBox(height: 10),
+            _primary('Ajouter', () {
+              final text = _todoText.text.trim();
+              if (text.isEmpty) return;
+              store.addTodo(Todo(
+                id: _uid(),
+                createdAt: DateTime.now(),
+                text: text,
+                description: _todoDesc.text.trim(),
+              ));
+              _todoText.clear();
+              _todoDesc.clear();
+            }),
+            if (recent.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Text('Dernières tâches',
+                  style: GoogleFonts.montserrat(
+                      fontWeight: FontWeight.w700,
+                      color: Colors.black,
+                      fontSize: 13)),
+              const SizedBox(height: 6),
+              ...recent.map(_quickTodoTile),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  /// Tâche dans la fenêtre rapide : coche pour marquer « fait ».
+  /// Une tâche cochée disparaît d'ici au bout de 30 min, mais reste
+  /// dans l'historique de l'accueil de l'app.
+  Widget _quickTodoTile(Todo t) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Row(
+        children: [
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            icon: Icon(
+                t.done ? Icons.check_circle : Icons.radio_button_unchecked,
+                size: 22),
+            color: t.done ? Colors.green : Colors.black38,
+            onPressed: () => store.toggleTodo(t.id),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  t.text,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.montserrat(
+                    fontSize: 14,
+                    decoration: t.done ? TextDecoration.lineThrough : null,
+                    color: t.done ? Colors.black38 : Colors.black,
+                  ),
+                ),
+                if (t.done)
+                  Text('Fait ✓ — disparaîtra d\'ici 30 min',
+                      style: GoogleFonts.montserrat(
+                          fontSize: 10, color: Colors.black38)),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1782,7 +2030,6 @@ class _CommandPanelState extends State<CommandPanel> {
             id: item.notificationId, body: text, when: remindAt);
       }
     }
-    widget.onOpenTab(2);
     _close();
   }
 

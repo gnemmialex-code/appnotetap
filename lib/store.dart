@@ -97,6 +97,19 @@ class Store extends ChangeNotifier {
     await _save(_kTodos, todos);
   }
 
+  /// Les 5 dernières tâches à montrer dans la petite fenêtre rapide
+  /// (les tâches cochées depuis plus de 30 min en sont exclues).
+  List<Todo> get quickPanelTodos =>
+      todos.where((t) => t.visibleInQuickPanel).take(5).toList();
+
+  Future<void> updateTodo(String id, {String? text, String? description}) async {
+    final t = todos.firstWhere((e) => e.id == id);
+    if (text != null && text.isNotEmpty) t.text = text;
+    if (description != null) t.description = description;
+    notifyListeners();
+    await _save(_kTodos, todos);
+  }
+
   Future<void> toggleTodo(String id) async {
     final t = todos.firstWhere((e) => e.id == id);
     t.done = !t.done;

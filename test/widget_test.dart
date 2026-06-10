@@ -1,31 +1,42 @@
-// Test de fumée : l'app se construit et affiche l'écran Notes + le bouton Tap Back.
+// Test de fumée : l'app démarre sur la fenêtre rapide ; l'accueil complet
+// ne s'ouvre que via le bouton « Ouvrir l'application ».
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:tapbacknote/main.dart';
 
 void main() {
-  testWidgets('L\'app démarre et affiche Tap Back', (WidgetTester tester) async {
+  testWidgets('L\'app démarre sur la fenêtre rapide', (WidgetTester tester) async {
     await tester.pumpWidget(const TapBackApp());
     await tester.pump();
 
-    // L'onglet Capture (Notes/To-Do/À lire) et le bouton flottant sont présents.
-    expect(find.text('Capture'), findsWidgets);
-    expect(find.text('Tap Back'), findsOneWidget);
+    // Le panneau de choix est visible, pas l'accueil complet.
+    expect(find.text('Shortist'), findsOneWidget);
+    expect(find.text('Note'), findsOneWidget);
+    expect(find.text('To-Do'), findsOneWidget);
+    expect(find.text('À lire'), findsOneWidget);
+    expect(find.text('Voir les notes'), findsOneWidget);
+    expect(find.text('Ouvrir l\'application'), findsOneWidget);
+    expect(find.text('Capture'), findsNothing);
+
+    // Démonte l'arbre pour annuler le Timer périodique du panneau.
+    await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('Le bouton Tap Back ouvre la fenêtre de commande',
+  testWidgets('« Ouvrir l\'application » mène à l\'accueil complet',
       (WidgetTester tester) async {
     await tester.pumpWidget(const TapBackApp());
     await tester.pump();
 
-    await tester.tap(find.text('Tap Back'));
+    await tester.tap(find.text('Ouvrir l\'application'));
     await tester.pumpAndSettle();
 
-    // Les actions apparaissent (« To-Do » et « À lire » existent aussi en onglet).
-    expect(find.text('Note'), findsOneWidget);
-    expect(find.text('To-Do'), findsWidgets);
-    expect(find.text('À lire'), findsWidgets);
-    expect(find.text('Voir les notes'), findsOneWidget);
+    // L'accueil complet (barre d'onglets) est affiché.
+    expect(find.text('Capture'), findsWidgets);
+    expect(find.text('Agenda'), findsWidgets);
+    expect(find.text('Fenêtre rapide'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
   });
 }

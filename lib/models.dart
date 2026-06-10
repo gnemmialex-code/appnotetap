@@ -36,6 +36,7 @@ class Todo {
   final String id;
   final DateTime createdAt;
   String text;
+  String description; // détail optionnel, éditable depuis l'accueil de l'app
   bool done;
   DateTime? doneAt; // date à laquelle la tâche a été marquée « Fait »
 
@@ -43,19 +44,31 @@ class Todo {
     required this.id,
     required this.createdAt,
     required this.text,
+    this.description = '',
     this.done = false,
     this.doneAt,
   });
+
+  /// Durée pendant laquelle une tâche cochée reste visible dans la
+  /// petite fenêtre rapide avant d'en disparaître (elle reste dans
+  /// l'historique de l'accueil de l'app).
+  static const panelLinger = Duration(minutes: 30);
 
   /// Vrai si la tâche est terminée depuis plus de 24 h
   /// (donc à retirer de la liste active mais à conserver dans l'archive).
   bool get archived =>
       done && doneAt != null && DateTime.now().difference(doneAt!).inHours >= 24;
 
+  /// Visible dans la petite fenêtre : non faite, ou faite depuis < 30 min.
+  bool get visibleInQuickPanel =>
+      !done ||
+      (doneAt != null && DateTime.now().difference(doneAt!) < panelLinger);
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'createdAt': createdAt.toIso8601String(),
         'text': text,
+        'description': description,
         'done': done,
         'doneAt': doneAt?.toIso8601String(),
       };
@@ -64,6 +77,7 @@ class Todo {
         id: j['id'] as String,
         createdAt: DateTime.parse(j['createdAt'] as String),
         text: j['text'] as String? ?? '',
+        description: j['description'] as String? ?? '',
         done: j['done'] as bool? ?? false,
         doneAt: (j['doneAt'] as String?) != null
             ? DateTime.parse(j['doneAt'] as String)

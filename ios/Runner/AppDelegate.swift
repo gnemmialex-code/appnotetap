@@ -38,6 +38,15 @@ import AppIntents
         }
         result(nil)
 
+      case "minimizeApp":
+        // Renvoie l'app en arrière-plan : l'utilisateur retrouve l'écran
+        // d'accueil de l'iPhone quand il ferme la petite fenêtre.
+        // ⚠️ Sélecteur non documenté par Apple : à surveiller lors de la review App Store.
+        DispatchQueue.main.async {
+          UIApplication.shared.perform(#selector(NSXPCConnection.suspend))
+        }
+        result(nil)
+
       case "checkPendingTrigger":
         // Vérifie si un tap-back s'est produit avant que Flutter soit prêt (cold start)
         if UserDefaults.standard.bool(forKey: "shortist_tap_pending") {

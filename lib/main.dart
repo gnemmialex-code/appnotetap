@@ -3,6 +3,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -163,8 +164,153 @@ class _PanelScreenState extends State<PanelScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D13),
-      body: CommandPanel(key: ValueKey(_panelGeneration)),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // iOS ne permet pas de voir le vrai écran d'accueil derrière une
+          // app : on affiche un accueil simulé (statique), flouté et
+          // légèrement assombri pour mettre la fenêtre en avant.
+          const _FakeHomeBackground(),
+          CommandPanel(key: ValueKey(_panelGeneration)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Faux écran d'accueil iPhone : fond d'écran dégradé, grille d'icônes
+/// et dock, le tout flouté + voile sombre. Purement décoratif et fixe.
+class _FakeHomeBackground extends StatelessWidget {
+  const _FakeHomeBackground();
+
+  static const _apps = <(IconData, Color)>[
+    (Icons.phone, Color(0xFF34C759)),
+    (Icons.chat_bubble, Color(0xFF30B0C7)),
+    (Icons.camera_alt, Color(0xFF8E8E93)),
+    (Icons.photo, Color(0xFFFF9F0A)),
+    (Icons.map, Color(0xFF32ADE6)),
+    (Icons.music_note, Color(0xFFFF2D55)),
+    (Icons.mail, Color(0xFF007AFF)),
+    (Icons.cloud, Color(0xFF5AC8FA)),
+    (Icons.calendar_today, Color(0xFFFF3B30)),
+    (Icons.alarm, Color(0xFF1C1C1E)),
+    (Icons.settings, Color(0xFF636366)),
+    (Icons.account_balance_wallet, Color(0xFF0A0A0A)),
+    (Icons.tv, Color(0xFF2C2C2E)),
+    (Icons.fitness_center, Color(0xFFFF375F)),
+    (Icons.podcasts, Color(0xFFBF5AF2)),
+    (Icons.newspaper, Color(0xFFFF453A)),
+    (Icons.calculate, Color(0xFFFF9500)),
+    (Icons.mic, Color(0xFF5856D6)),
+    (Icons.book, Color(0xFFFF9F0A)),
+    (Icons.videocam, Color(0xFF34C759)),
+  ];
+
+  Widget _icon((IconData, Color) app, {double size = 54, bool label = true}) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [app.$2.withValues(alpha: 0.95), app.$2],
+            ),
+            borderRadius: BorderRadius.circular(size * 0.24),
+          ),
+          child: Icon(app.$1, color: Colors.white, size: size * 0.5),
+        ),
+        if (label) ...[
+          const SizedBox(height: 7),
+          Container(
+            width: 34,
+            height: 5,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.55),
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        ImageFiltered(
+          imageFilter: ImageFilter.blur(sigmaX: 3, sigmaY: 3),
+          child: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF1B2A6B),
+                  Color(0xFF4A3A8C),
+                  Color(0xFF1A4A7A),
+                ],
+              ),
+            ),
+            child: SafeArea(
+              child: Column(
+                children: [
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 26, vertical: 14),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          for (int row = 0; row < 5; row++)
+                            Row(
+                              mainAxisAlignment:
+                                  MainAxisAlignment.spaceBetween,
+                              children: [
+                                for (int col = 0; col < 4; col++)
+                                  _icon(_apps[row * 4 + col]),
+                              ],
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  // Dock
+                  Container(
+                    margin: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(32),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _icon((Icons.phone, const Color(0xFF34C759)),
+                            label: false),
+                        _icon((Icons.public, const Color(0xFF007AFF)),
+                            label: false),
+                        _icon((Icons.chat_bubble, const Color(0xFF30B0C7)),
+                            label: false),
+                        _icon((Icons.music_note, const Color(0xFFFF2D55)),
+                            label: false),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        // Voile sombre : met la fenêtre blanche en avant.
+        Container(color: Colors.black.withValues(alpha: 0.30)),
+      ],
     );
   }
 }
@@ -1564,48 +1710,67 @@ class _CommandPanelState extends State<CommandPanel> {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Align(
-        alignment: Alignment.topCenter,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-          // Entrée en glissant depuis le haut (le panneau est recréé à
-          // chaque tap-back via sa clé, donc l'animation rejoue).
-          child: TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0, end: 1),
-            duration: const Duration(milliseconds: 320),
-            curve: Curves.easeOutCubic,
-            builder: (context, v, child) => Opacity(
-              opacity: v,
-              child: Transform.translate(
-                  offset: Offset(0, (1 - v) * -60), child: child),
+    // Le panneau est collé au bord supérieur PHYSIQUE de l'écran : son fond
+    // blanc passe sous l'encoche / la Dynamic Island, et seul le contenu
+    // respecte la safe area. Coins arrondis en bas uniquement → la fenêtre
+    // semble sortir de l'encoche de l'iPhone.
+    final topInset = MediaQuery.paddingOf(context).top;
+    return Align(
+      alignment: Alignment.topCenter,
+      child: SingleChildScrollView(
+        // Entrée en glissant depuis le haut, avec un léger rebond
+        // (le panneau est recréé à chaque tap-back via sa clé,
+        // donc l'animation rejoue).
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: 1),
+          duration: const Duration(milliseconds: 520),
+          curve: Curves.easeOutBack,
+          builder: (context, v, child) => Transform.translate(
+            offset: Offset(0, (1 - v) * -460),
+            child: child,
+          ),
+          child: Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: const BorderRadius.vertical(
+                  bottom: Radius.circular(30)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.30),
+                  blurRadius: 36,
+                  offset: const Offset(0, 14),
+                ),
+              ],
             ),
             child: Material(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(26),
-              elevation: 0,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(26),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.12),
-                      blurRadius: 30,
-                      offset: const Offset(0, 8),
+              color: Colors.transparent,
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(14, topInset + 6, 14, 10),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 280),
+                      curve: Curves.easeOutCubic,
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 220),
+                        child: _buildMode(),
+                      ),
+                    ),
+                    // Petite poignée décorative en bas du panneau.
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Container(
+                        width: 38,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
                     ),
                   ],
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: AnimatedSize(
-                    duration: const Duration(milliseconds: 280),
-                    curve: Curves.easeOutCubic,
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 220),
-                      child: _buildMode(),
-                    ),
-                  ),
                 ),
               ),
             ),

@@ -27,7 +27,8 @@ void main() {
   testWidgets('« Ouvrir l\'application » mène à l\'accueil complet',
       (WidgetTester tester) async {
     await tester.pumpWidget(const TapBackApp());
-    await tester.pump();
+    // Laisse finir l'animation d'entrée du panneau avant de taper.
+    await tester.pump(const Duration(seconds: 1));
 
     await tester.tap(find.text('Ouvrir l\'application'));
     await tester.pumpAndSettle();

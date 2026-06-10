@@ -1,7 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'bridge.dart';
 import 'store.dart';
+
+const _bg         = Color(0xFFF5F5FA);
+const _surface    = Color(0xFFFFFFFF);
+const _textPrim   = Color(0xFF1C1C2E);
+const _textSec    = Color(0xFF888898);
+const _border     = Color(0xFFEAEAF2);
+const _accent     = Color(0xFF1C1C2E);
 
 class OnboardingScreen extends StatelessWidget {
   const OnboardingScreen({super.key});
@@ -9,7 +17,7 @@ class OnboardingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: _bg,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(28, 0, 28, 0),
@@ -23,51 +31,61 @@ class OnboardingScreen extends StatelessWidget {
                 height: 88,
                 margin: const EdgeInsets.only(bottom: 24),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.10),
+                  color: _surface,
                   borderRadius: BorderRadius.circular(24),
-                  border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.12)),
+                  border: Border.all(color: _border),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _textPrim.withValues(alpha: 0.07),
+                      blurRadius: 16,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
                 child: const Icon(Icons.touch_app_outlined,
-                    color: Colors.white, size: 44),
+                    color: _textPrim, size: 44),
               ),
               // Titre
-              const Text(
+              Text(
                 '"Shortist" souhaite\nutiliser le Tap-back',
-                style: TextStyle(
+                style: GoogleFonts.montserrat(
                     fontSize: 26,
                     fontWeight: FontWeight.w800,
-                    color: Colors.white,
+                    color: _textPrim,
                     height: 1.25),
               ),
               const SizedBox(height: 14),
               // Description
-              const Text(
+              Text(
                 'Double-tape le dos de ton iPhone pour ouvrir instantanément le panneau de commande, depuis n\'importe où.',
-                style: TextStyle(
-                    fontSize: 16,
-                    color: Color(0x99FFFFFF),
-                    height: 1.5),
+                style: GoogleFonts.montserrat(
+                    fontSize: 15, color: _textSec, height: 1.6),
               ),
-              const SizedBox(height: 32),
-              // Chemin de navigation — style pill
+              const SizedBox(height: 28),
+              // Chemin de navigation
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: const Color(0x14FFFFFF),
+                  color: _surface,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.08)),
+                  border: Border.all(color: _border),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _textPrim.withValues(alpha: 0.04),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Dans les Réglages iOS :',
-                        style: TextStyle(
-                            fontSize: 12,
-                            color: Color(0x66FFFFFF),
+                    Text('Dans les Réglages iOS :',
+                        style: GoogleFonts.montserrat(
+                            fontSize: 11,
+                            color: _textSec,
                             fontWeight: FontWeight.w600,
-                            letterSpacing: 0.5)),
+                            letterSpacing: 0.4)),
                     const SizedBox(height: 10),
                     _pathRow([
                       'Accessibilité',
@@ -82,7 +100,7 @@ class OnboardingScreen extends StatelessWidget {
               const Spacer(flex: 2),
               // Bouton principal
               _ConfigureButton(),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
               // Bouton secondaire
               _SecondaryButton(),
               const SizedBox(height: 36),
@@ -96,29 +114,28 @@ class OnboardingScreen extends StatelessWidget {
   Widget _pathRow(List<String> steps) {
     final List<Widget> children = [];
     for (int i = 0; i < steps.length; i++) {
+      final isLast = i == steps.length - 1;
       children.add(
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
-            color: i == steps.length - 1
-                ? Colors.white
-                : Colors.white.withValues(alpha: 0.12),
+            color: isLast ? _accent : const Color(0xFFEEEEF6),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(
             steps[i],
-            style: TextStyle(
-              fontSize: 13,
+            style: GoogleFonts.montserrat(
+              fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: i == steps.length - 1 ? Colors.black : Colors.white,
+              color: isLast ? Colors.white : _textPrim,
             ),
           ),
         ),
       );
-      if (i < steps.length - 1) {
+      if (!isLast) {
         children.add(const Padding(
           padding: EdgeInsets.symmetric(horizontal: 3),
-          child: Icon(Icons.chevron_right, size: 16, color: Color(0x55FFFFFF)),
+          child: Icon(Icons.chevron_right, size: 16, color: _textSec),
         ));
       }
     }
@@ -157,19 +174,27 @@ class _ConfigureButtonState extends State<_ConfigureButton> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 17),
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
+            color: _accent,
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [
+              BoxShadow(
+                color: _accent.withValues(alpha: 0.25),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+            ],
           ),
-          child: const Row(
+          child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text('Configurer maintenant',
-                  style: TextStyle(
-                      color: Colors.black,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 17)),
-              SizedBox(width: 6),
-              Icon(Icons.arrow_forward_ios, size: 14, color: Colors.black),
+                  style: GoogleFonts.montserrat(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16)),
+              const SizedBox(width: 6),
+              const Icon(Icons.arrow_forward_ios,
+                  size: 13, color: Colors.white),
             ],
           ),
         ),
@@ -188,14 +213,14 @@ class _SecondaryButton extends StatelessWidget {
           Navigator.of(context).pushReplacementNamed('/app');
         }
       },
-      child: const Padding(
-        padding: EdgeInsets.symmetric(vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
         child: Text(
           'Passer pour l\'instant',
           textAlign: TextAlign.center,
-          style: TextStyle(
-              color: Color(0x66FFFFFF),
-              fontSize: 15,
+          style: GoogleFonts.montserrat(
+              color: _textSec,
+              fontSize: 14,
               fontWeight: FontWeight.w500),
         ),
       ),

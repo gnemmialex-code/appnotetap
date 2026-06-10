@@ -89,8 +89,9 @@ final class QuickNoteManager: ObservableObject {
         isPresented = true
     }
 
-    /// Ferme FloatingQuickNoteView.
+    /// Ferme FloatingQuickNoteView et revient sur l'onglet Notes (état neutre).
     func dismissFloatingWindow() {
         isPresented = false
+        AppRouter.shared.selectedTab = .notes
     }
 }

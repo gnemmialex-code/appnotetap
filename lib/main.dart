@@ -1,15 +1,11 @@
-// TapBack Note — application Flutter (notes, to-dos, recherche rapide).
-//
-// Concept : un bouton « Tap Back » ouvre une fenêtre de commande en haut de
-// l'écran avec 4 actions (Note, To-Do, Rechercher, Voir les notes), chacune
-// s'ouvrant en place. Persistance locale via shared_preferences.
-//
-// NB : sur iOS, la police par défaut est San Francisco (police système).
+// TapBack Note — application Flutter.
+// Thème blanc et gris clair, police Montserrat, boutons arrondis avec ombre.
 
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'bridge.dart';
@@ -26,11 +22,13 @@ Future<void> main() async {
   runApp(const TapBackApp());
 }
 
-// Palette
-const _bg = Color(0xFF000000);
-const _surface = Color(0x14FFFFFF);
-const _surfaceStrong = Color(0x1FFFFFFF);
-const _textSecondary = Color(0x8CFFFFFF);
+// ── Palette ─────────────────────────────────────────────────────────────────
+const _bg            = Color(0xFFF5F5FA);
+const _surface       = Color(0xFFFFFFFF);
+const _surfaceStrong = Color(0xFFEEEEF6);
+const _textPrimary   = Color(0xFF1C1C2E);
+const _textSecondary = Color(0xFF888898);
+const _border        = Color(0xFFEAEAF2);
 
 String _uid() => DateTime.now().microsecondsSinceEpoch.toRadixString(36);
 
@@ -54,13 +52,60 @@ class TapBackApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final textTheme =
+        GoogleFonts.montserratTextTheme(ThemeData.light().textTheme);
     final base = ThemeData(
       useMaterial3: true,
-      brightness: Brightness.dark,
+      brightness: Brightness.light,
       scaffoldBackgroundColor: _bg,
-      colorScheme: const ColorScheme.dark(
+      colorScheme: const ColorScheme.light(
         surface: _bg,
-        primary: Colors.white,
+        primary: _textPrimary,
+        onPrimary: Colors.white,
+        secondary: _textPrimary,
+        onSecondary: Colors.white,
+      ),
+      textTheme: textTheme,
+      // NavigationBar (barre du bas)
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: _surface,
+        indicatorColor: _surfaceStrong,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        iconTheme: WidgetStateProperty.resolveWith((states) {
+          final sel = states.contains(WidgetState.selected);
+          return IconThemeData(
+              color: sel ? _textPrimary : _textSecondary, size: 24);
+        }),
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          final sel = states.contains(WidgetState.selected);
+          return GoogleFonts.montserrat(
+            fontSize: 11,
+            fontWeight: sel ? FontWeight.w700 : FontWeight.w500,
+            color: sel ? _textPrimary : _textSecondary,
+          );
+        }),
+      ),
+      // TabBar (CaptureHub)
+      tabBarTheme: TabBarThemeData(
+        labelColor: _textPrimary,
+        unselectedLabelColor: _textSecondary,
+        labelStyle:
+            GoogleFonts.montserrat(fontSize: 14, fontWeight: FontWeight.w700),
+        unselectedLabelStyle:
+            GoogleFonts.montserrat(fontSize: 14, fontWeight: FontWeight.w500),
+        indicator: BoxDecoration(
+          color: _textPrimary.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        indicatorSize: TabBarIndicatorSize.tab,
+        dividerColor: Colors.transparent,
+      ),
+      expansionTileTheme: const ExpansionTileThemeData(
+        iconColor: _textPrimary,
+        collapsedIconColor: _textSecondary,
+        textColor: _textPrimary,
+        collapsedTextColor: _textPrimary,
       ),
     );
     return MaterialApp(
@@ -83,8 +128,8 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  int _tab = 0;          // 0 = Capture (Notes/To-Do/À lire), 1 = Agenda, 2 = Carnet, 3 = Réglages
-  int _captureSub = 0;   // sous-onglet du hub Capture
+  int _tab = 0;       // 0 = Capture, 1 = Agenda, 2 = Carnet, 3 = Réglages
+  int _captureSub = 0;
 
   @override
   void initState() {
@@ -110,7 +155,6 @@ class _HomePageState extends State<HomePage> {
       barrierColor: Colors.black54,
       transitionDuration: const Duration(milliseconds: 300),
       pageBuilder: (_, _, _) => CommandPanel(
-        // i = 0 Notes · 1 To-Do · 2 À lire → ouvre le hub Capture sur ce sous-onglet
         onOpenTab: (i) => setState(() {
           _tab = 0;
           _captureSub = i;
@@ -160,21 +204,35 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
           ),
-          bottomNavigationBar: NavigationBar(
-            selectedIndex: _tab,
-            onDestinationSelected: (i) => setState(() => _tab = i),
-            backgroundColor: const Color(0xFF111114),
-            labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
-            destinations: const [
-              NavigationDestination(
-                  icon: Icon(Icons.dynamic_feed), label: 'Capture'),
-              NavigationDestination(
-                  icon: Icon(Icons.event), label: 'Agenda'),
-              NavigationDestination(
-                  icon: Icon(Icons.menu_book), label: 'Carnet'),
-              NavigationDestination(
-                  icon: Icon(Icons.settings_outlined), label: 'Réglages'),
-            ],
+          bottomNavigationBar: Container(
+            decoration: BoxDecoration(
+              color: _surface,
+              border: Border(top: BorderSide(color: _border, width: 1)),
+            ),
+            child: NavigationBar(
+              selectedIndex: _tab,
+              onDestinationSelected: (i) => setState(() => _tab = i),
+              labelBehavior:
+                  NavigationDestinationLabelBehavior.onlyShowSelected,
+              destinations: const [
+                NavigationDestination(
+                    icon: Icon(Icons.dynamic_feed_outlined),
+                    selectedIcon: Icon(Icons.dynamic_feed),
+                    label: 'Capture'),
+                NavigationDestination(
+                    icon: Icon(Icons.event_outlined),
+                    selectedIcon: Icon(Icons.event),
+                    label: 'Agenda'),
+                NavigationDestination(
+                    icon: Icon(Icons.menu_book_outlined),
+                    selectedIcon: Icon(Icons.menu_book),
+                    label: 'Carnet'),
+                NavigationDestination(
+                    icon: Icon(Icons.settings_outlined),
+                    selectedIcon: Icon(Icons.settings),
+                    label: 'Réglages'),
+              ],
+            ),
           ),
         );
       },
@@ -183,7 +241,7 @@ class _HomePageState extends State<HomePage> {
 }
 
 // ============================================================
-// Écrans (listes)
+// Widgets partagés
 // ============================================================
 
 class _Page extends StatelessWidget {
@@ -197,13 +255,15 @@ class _Page extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
+          padding: const EdgeInsets.fromLTRB(20, 14, 12, 8),
           child: Row(
             children: [
               Expanded(
                 child: Text(title,
-                    style: const TextStyle(
-                        fontSize: 32, fontWeight: FontWeight.w700)),
+                    style: GoogleFonts.montserrat(
+                        fontSize: 30,
+                        fontWeight: FontWeight.w800,
+                        color: _textPrimary)),
               ),
               ?trailing,
             ],
@@ -228,14 +288,18 @@ class _Empty extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 44, color: Colors.white24),
+            Icon(icon, size: 44, color: const Color(0xFFCCCCE0)),
             const SizedBox(height: 12),
             Text(title,
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
+                style: GoogleFonts.montserrat(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: _textPrimary)),
             const SizedBox(height: 6),
             Text(message,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: _textSecondary)),
+                style: GoogleFonts.montserrat(
+                    fontSize: 14, color: _textSecondary, height: 1.5)),
           ],
         ),
       ),
@@ -246,8 +310,19 @@ class _Empty extends StatelessWidget {
 BoxDecoration get _card => BoxDecoration(
       color: _surface,
       borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      border: Border.all(color: _border),
+      boxShadow: [
+        BoxShadow(
+          color: _textPrimary.withValues(alpha: 0.05),
+          blurRadius: 8,
+          offset: const Offset(0, 2),
+        ),
+      ],
     );
+
+// ============================================================
+// Écrans
+// ============================================================
 
 class NotesScreen extends StatelessWidget {
   final bool embedded;
@@ -256,50 +331,53 @@ class NotesScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final notes = store.notes;
     final body = notes.isEmpty
-          ? const _Empty(Icons.mic_none, 'Aucune note',
-              'Touche « Tap Back » puis Note pour créer une note.')
-          : ListView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
-              itemCount: notes.length,
-              itemBuilder: (context, i) {
-                final n = notes[i];
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.all(14),
-                  decoration: _card,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(n.title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                    fontSize: 17, fontWeight: FontWeight.w600)),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline, size: 20),
-                            color: _textSecondary,
-                            onPressed: () => store.deleteNote(n.id),
-                          ),
-                        ],
-                      ),
-                      if (n.body.isNotEmpty)
-                        Text(n.body,
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: _textSecondary)),
-                      const SizedBox(height: 6),
-                      Text(formatStamp(n.createdAt),
-                          style: const TextStyle(
-                              fontSize: 12, color: Colors.white38)),
-                    ],
-                  ),
-                );
-              },
-            );
+        ? const _Empty(Icons.mic_none, 'Aucune note',
+            'Touche « Tap Back » puis Note pour créer une note.')
+        : ListView.builder(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+            itemCount: notes.length,
+            itemBuilder: (context, i) {
+              final n = notes[i];
+              return Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(14),
+                decoration: _card,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(n.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.montserrat(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: _textPrimary)),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, size: 20),
+                          color: _textSecondary,
+                          onPressed: () => store.deleteNote(n.id),
+                        ),
+                      ],
+                    ),
+                    if (n.body.isNotEmpty)
+                      Text(n.body,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.montserrat(
+                              fontSize: 14, color: _textSecondary, height: 1.4)),
+                    const SizedBox(height: 6),
+                    Text(formatStamp(n.createdAt),
+                        style: GoogleFonts.montserrat(
+                            fontSize: 11, color: const Color(0xFFBBBBCC))),
+                  ],
+                ),
+              );
+            },
+          );
     return embedded ? body : _Page(title: 'Notes', child: body);
   }
 }
@@ -317,14 +395,10 @@ class _TodosScreenState extends State<TodosScreen> {
   @override
   Widget build(BuildContext context) {
     final all = store.todos;
-    // Liste active : tâches non terminées + terminées depuis moins de 24 h.
     final active = all.where((t) => !t.archived).toList();
-    // Archive : toutes les tâches terminées (conservées avec leurs dates),
-    // triées par date de réalisation décroissante.
     final done = all.where((t) => t.done).toList()
       ..sort((a, b) =>
           (b.doneAt ?? b.createdAt).compareTo(a.doneAt ?? a.createdAt));
-
     final list = _showArchive ? done : active;
 
     final body = Column(
@@ -356,14 +430,23 @@ class _TodosScreenState extends State<TodosScreen> {
             padding: const EdgeInsets.symmetric(vertical: 9),
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: selected ? Colors.white : Colors.transparent,
+              color: selected ? _textPrimary : Colors.transparent,
               borderRadius: BorderRadius.circular(11),
+              boxShadow: selected
+                  ? [
+                      BoxShadow(
+                        color: _textPrimary.withValues(alpha: 0.15),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      )
+                    ]
+                  : null,
             ),
             child: Text(label,
-                style: TextStyle(
-                    color: selected ? Colors.black : _textSecondary,
+                style: GoogleFonts.montserrat(
+                    color: selected ? Colors.white : _textSecondary,
                     fontWeight: FontWeight.w600,
-                    fontSize: 14)),
+                    fontSize: 13)),
           ),
         ),
       );
@@ -372,7 +455,7 @@ class _TodosScreenState extends State<TodosScreen> {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
       decoration: BoxDecoration(
-          color: _surface, borderRadius: BorderRadius.circular(14)),
+          color: _surfaceStrong, borderRadius: BorderRadius.circular(14)),
       child: Row(
         children: [
           seg('À faire ($activeCount)', !_showArchive,
@@ -386,7 +469,7 @@ class _TodosScreenState extends State<TodosScreen> {
 
   Widget _emptyFor(bool archive) => archive
       ? const _Empty(Icons.history, 'Aucune tâche terminée',
-          'Les tâches cochées « Fait » sont conservées ici avec leurs dates.')
+          'Les tâches cochées sont conservées ici avec leurs dates.')
       : const _Empty(Icons.checklist, 'Aucune tâche',
           'Touche « Tap Back » puis To-Do pour ajouter une tâche.');
 
@@ -398,8 +481,9 @@ class _TodosScreenState extends State<TodosScreen> {
       child: Row(
         children: [
           IconButton(
-            icon: Icon(
-                t.done ? Icons.check_circle : Icons.radio_button_unchecked),
+            icon: Icon(t.done
+                ? Icons.check_circle
+                : Icons.radio_button_unchecked),
             color: t.done ? Colors.green : _textSecondary,
             onPressed: () => store.toggleTodo(t.id),
           ),
@@ -409,14 +493,19 @@ class _TodosScreenState extends State<TodosScreen> {
               children: [
                 Text(
                   t.text,
-                  style: TextStyle(
-                    decoration: t.done ? TextDecoration.lineThrough : null,
-                    color: t.done ? Colors.white38 : Colors.white,
+                  style: GoogleFonts.montserrat(
+                    fontSize: 15,
+                    decoration:
+                        t.done ? TextDecoration.lineThrough : null,
+                    color: t.done
+                        ? const Color(0xFFBBBBCC)
+                        : _textPrimary,
                   ),
                 ),
                 if (t.done)
-                  const Text('Fait · retiré de la liste dans 24 h',
-                      style: TextStyle(fontSize: 11, color: Colors.white38)),
+                  Text('Fait · retiré de la liste dans 24 h',
+                      style: GoogleFonts.montserrat(
+                          fontSize: 11, color: _textSecondary)),
               ],
             ),
           ),
@@ -447,17 +536,19 @@ class _TodosScreenState extends State<TodosScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(t.text,
-                    style: const TextStyle(
-                        color: Colors.white70,
+                    style: GoogleFonts.montserrat(
+                        color: _textSecondary,
                         decoration: TextDecoration.lineThrough)),
                 const SizedBox(height: 4),
                 Text('Créée : ${formatStamp(t.createdAt)}',
-                    style:
-                        const TextStyle(fontSize: 12, color: Colors.white38)),
+                    style: GoogleFonts.montserrat(
+                        fontSize: 11,
+                        color: const Color(0xFFBBBBCC))),
                 if (t.doneAt != null)
                   Text('Faite : ${formatStamp(t.doneAt!)}',
-                      style: const TextStyle(
-                          fontSize: 12, color: Colors.greenAccent)),
+                      style: GoogleFonts.montserrat(
+                          fontSize: 11,
+                          color: Colors.green.shade600)),
               ],
             ),
           ),
@@ -479,79 +570,85 @@ class ReadingScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final items = store.reading;
     final body = items.isEmpty
-          ? const _Empty(Icons.bookmark_border, 'Rien à lire pour l\'instant',
-              'Touche « Tap Back » puis « À lire » pour garder un lien/texte et programmer un rappel.')
-          : ListView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
-              itemCount: items.length,
-              itemBuilder: (context, i) {
-                final it = items[i];
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                  decoration: _card,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      IconButton(
-                        icon: Icon(it.done
-                            ? Icons.check_circle
-                            : Icons.radio_button_unchecked),
-                        color: it.done ? Colors.green : _textSecondary,
-                        onPressed: () => store.toggleReading(it.id),
-                      ),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              it.text,
-                              maxLines: 3,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 16,
-                                decoration:
-                                    it.done ? TextDecoration.lineThrough : null,
-                                color: it.done ? Colors.white38 : Colors.white,
-                              ),
+        ? const _Empty(Icons.bookmark_border, 'Rien à lire pour l\'instant',
+            'Touche « Tap Back » puis « À lire » pour garder un lien/texte et programmer un rappel.')
+        : ListView.builder(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+            itemCount: items.length,
+            itemBuilder: (context, i) {
+              final it = items[i];
+              return Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                decoration: _card,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    IconButton(
+                      icon: Icon(it.done
+                          ? Icons.check_circle
+                          : Icons.radio_button_unchecked),
+                      color: it.done ? Colors.green : _textSecondary,
+                      onPressed: () => store.toggleReading(it.id),
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            it.text,
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.montserrat(
+                              fontSize: 15,
+                              decoration: it.done
+                                  ? TextDecoration.lineThrough
+                                  : null,
+                              color: it.done
+                                  ? const Color(0xFFBBBBCC)
+                                  : _textPrimary,
                             ),
-                            if (it.remindAt != null)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 2),
-                                child: Text('⏰ ${formatStamp(it.remindAt!)}',
-                                    style: const TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.orangeAccent)),
-                              ),
-                            Text('Ajouté : ${formatStamp(it.createdAt)}',
-                                style: const TextStyle(
-                                    fontSize: 12, color: Colors.white38)),
-                          ],
-                        ),
+                          ),
+                          if (it.remindAt != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Text(
+                                  '⏰ ${formatStamp(it.remindAt!)}',
+                                  style: GoogleFonts.montserrat(
+                                      fontSize: 11,
+                                      color: Colors.orange.shade700)),
+                            ),
+                          Text('Ajouté : ${formatStamp(it.createdAt)}',
+                              style: GoogleFonts.montserrat(
+                                  fontSize: 11,
+                                  color: const Color(0xFFBBBBCC))),
+                        ],
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline, size: 20),
-                        color: _textSecondary,
-                        onPressed: () {
-                          Notifications.cancel(it.notificationId);
-                          store.deleteReading(it.id);
-                        },
-                      ),
-                    ],
-                  ),
-                );
-              },
-            );
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, size: 20),
+                      color: _textSecondary,
+                      onPressed: () {
+                        Notifications.cancel(it.notificationId);
+                        store.deleteReading(it.id);
+                      },
+                    ),
+                  ],
+                ),
+              );
+            },
+          );
     return embedded ? body : _Page(title: 'À lire', child: body);
   }
 }
 
 // ============================================================
-// Hub Capture : Notes + To-Do + À lire, swipe gauche/droite
+// Hub Capture : Notes + To-Do + À lire
 // ============================================================
 
 class CaptureHub extends StatefulWidget {
-  final int sub; // 0 = Notes, 1 = To-Do, 2 = À lire
+  final int sub;
   const CaptureHub({super.key, required this.sub});
   @override
   State<CaptureHub> createState() => _CaptureHubState();
@@ -583,16 +680,6 @@ class _CaptureHubState extends State<CaptureHub>
         const SizedBox(height: 6),
         TabBar(
           controller: _c,
-          dividerColor: Colors.transparent,
-          indicatorSize: TabBarIndicatorSize.tab,
-          indicator: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          labelColor: Colors.white,
-          unselectedLabelColor: _textSecondary,
-          labelStyle:
-              const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
           tabs: const [
             Tab(text: '🎙️ Notes'),
             Tab(text: '✅ To-Do'),
@@ -615,7 +702,7 @@ class _CaptureHubState extends State<CaptureHub>
 }
 
 // ============================================================
-// Agenda (événements locaux)
+// Agenda
 // ============================================================
 
 class AgendaScreen extends StatelessWidget {
@@ -623,12 +710,12 @@ class AgendaScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final events = store.events; // déjà triés par date (store.addEvent)
+    final events = store.events;
     return _Page(
       title: 'Agenda',
       trailing: PressPop(
         child: IconButton(
-          icon: const Icon(Icons.add, color: Colors.white),
+          icon: const Icon(Icons.add, color: _textPrimary),
           onPressed: () => _add(context),
         ),
       ),
@@ -657,11 +744,14 @@ class AgendaScreen extends StatelessWidget {
                         child: Column(
                           children: [
                             Text('${ev.when.day}',
-                                style: const TextStyle(
-                                    fontSize: 22, fontWeight: FontWeight.w700)),
+                                style: GoogleFonts.montserrat(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w700,
+                                    color: _textPrimary)),
                             Text(_monthShort(ev.when.month),
-                                style: const TextStyle(
-                                    fontSize: 11, color: _textSecondary)),
+                                style: GoogleFonts.montserrat(
+                                    fontSize: 11,
+                                    color: _textSecondary)),
                           ],
                         ),
                       ),
@@ -671,11 +761,14 @@ class AgendaScreen extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(ev.title,
-                                style: const TextStyle(
-                                    fontSize: 16, fontWeight: FontWeight.w600)),
-                            Text('🕒 $hm${ev.note.isNotEmpty ? ' · ${ev.note}' : ''}',
-                                style: const TextStyle(
-                                    fontSize: 13, color: _textSecondary)),
+                                style: GoogleFonts.montserrat(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                    color: _textPrimary)),
+                            Text(
+                                '🕒 $hm${ev.note.isNotEmpty ? ' · ${ev.note}' : ''}',
+                                style: GoogleFonts.montserrat(
+                                    fontSize: 12, color: _textSecondary)),
                           ],
                         ),
                       ),
@@ -723,7 +816,7 @@ class AgendaScreen extends StatelessWidget {
 }
 
 // ============================================================
-// Carnet (notes détaillées : titre, note, date/heure, image)
+// Carnet
 // ============================================================
 
 class CarnetScreen extends StatelessWidget {
@@ -736,7 +829,7 @@ class CarnetScreen extends StatelessWidget {
       title: 'Carnet',
       trailing: PressPop(
         child: IconButton(
-          icon: const Icon(Icons.add, color: Colors.white),
+          icon: const Icon(Icons.add, color: _textPrimary),
           onPressed: () => _add(context),
         ),
       ),
@@ -759,8 +852,10 @@ class CarnetScreen extends StatelessWidget {
                         children: [
                           Expanded(
                             child: Text(f.title,
-                                style: const TextStyle(
-                                    fontSize: 17, fontWeight: FontWeight.w600)),
+                                style: GoogleFonts.montserrat(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: _textPrimary)),
                           ),
                           IconButton(
                             icon: const Icon(Icons.delete_outline, size: 20),
@@ -771,13 +866,17 @@ class CarnetScreen extends StatelessWidget {
                       ),
                       if (f.note.isNotEmpty)
                         Text(f.note,
-                            style: const TextStyle(color: _textSecondary)),
+                            style: GoogleFonts.montserrat(
+                                fontSize: 14,
+                                color: _textSecondary,
+                                height: 1.4)),
                       if (f.when != null)
                         Padding(
                           padding: const EdgeInsets.only(top: 6),
                           child: Text('🕒 ${formatStamp(f.when!)}',
-                              style: const TextStyle(
-                                  fontSize: 12, color: Colors.white38)),
+                              style: GoogleFonts.montserrat(
+                                  fontSize: 11,
+                                  color: const Color(0xFFBBBBCC))),
                         ),
                       if (f.imageB64 != null)
                         Padding(
@@ -820,15 +919,21 @@ class CarnetScreen extends StatelessWidget {
         PressPop(
           child: OutlinedButton.icon(
             style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.white,
-              side: const BorderSide(color: Colors.white24),
+              foregroundColor: _textPrimary,
+              side: const BorderSide(color: _border),
               minimumSize: const Size.fromHeight(48),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14)),
             ),
             icon: const Icon(Icons.image_outlined),
-            label: Text(imageB64 == null ? 'Ajouter une image' : 'Image ajoutée ✓'),
+            label: Text(
+                imageB64 == null ? 'Ajouter une image' : 'Image ajoutée ✓',
+                style: GoogleFonts.montserrat(fontWeight: FontWeight.w600)),
             onPressed: () async {
               final picked = await ImagePicker().pickImage(
-                  source: ImageSource.gallery, maxWidth: 1280, imageQuality: 80);
+                  source: ImageSource.gallery,
+                  maxWidth: 1280,
+                  imageQuality: 80);
               if (picked == null) return;
               final bytes = await picked.readAsBytes();
               setSheet(() => imageB64 = base64Encode(bytes));
@@ -841,7 +946,8 @@ class CarnetScreen extends StatelessWidget {
           store.addCarnet(CarnetEntry(
             id: _uid(),
             createdAt: DateTime.now(),
-            title: title.text.trim().isEmpty ? 'Fiche' : title.text.trim(),
+            title:
+                title.text.trim().isEmpty ? 'Fiche' : title.text.trim(),
             note: note.text.trim(),
             when: when,
             imageB64: imageB64,
@@ -854,7 +960,7 @@ class CarnetScreen extends StatelessWidget {
 }
 
 // ============================================================
-// Réglages (profil + documents obligatoires)
+// Réglages
 // ============================================================
 
 const _legalDocs = <(String, String)>[
@@ -912,7 +1018,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
         children: [
-          // --- Carte profil ---
+          // Carte profil
           Container(
             padding: const EdgeInsets.all(16),
             decoration: _card,
@@ -928,16 +1034,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             child: store.profileAvatarB64 != null
                                 ? Image.memory(
                                     base64Decode(store.profileAvatarB64!),
-                                    width: 84, height: 84, fit: BoxFit.cover)
+                                    width: 84,
+                                    height: 84,
+                                    fit: BoxFit.cover)
                                 : Container(
                                     width: 84,
                                     height: 84,
                                     color: _surfaceStrong,
                                     alignment: Alignment.center,
                                     child: Text(initial,
-                                        style: const TextStyle(
-                                            fontSize: 34,
-                                            fontWeight: FontWeight.w700)),
+                                        style: GoogleFonts.montserrat(
+                                            fontSize: 32,
+                                            fontWeight: FontWeight.w700,
+                                            color: _textPrimary)),
                                   ),
                           ),
                           Positioned(
@@ -946,10 +1055,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             child: Container(
                               width: 28,
                               height: 28,
-                              decoration: const BoxDecoration(
-                                  color: Colors.white, shape: BoxShape.circle),
+                              decoration: BoxDecoration(
+                                  color: _textPrimary,
+                                  shape: BoxShape.circle),
                               child: const Icon(Icons.edit,
-                                  size: 15, color: Colors.black),
+                                  size: 15, color: Colors.white),
                             ),
                           ),
                         ],
@@ -966,41 +1076,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 PressPop(
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.black,
-                      minimumSize: const Size.fromHeight(48),
+                      backgroundColor: _textPrimary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      minimumSize: const Size.fromHeight(50),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14)),
+                          borderRadius: BorderRadius.circular(16)),
                     ),
                     onPressed: () async {
                       await store.saveProfile(
-                          name: _name.text.trim(), email: _email.text.trim());
+                          name: _name.text.trim(),
+                          email: _email.text.trim());
                       if (!context.mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Profil enregistré ✓')),
+                        SnackBar(
+                          content: Text('Profil enregistré ✓',
+                              style: GoogleFonts.montserrat()),
+                          backgroundColor: _textPrimary,
+                        ),
                       );
                     },
-                    child: const Text('Enregistrer',
-                        style: TextStyle(fontWeight: FontWeight.w700)),
+                    child: Text('Enregistrer',
+                        style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w700)),
                   ),
                 ),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   '📧 Dans la vraie app, l\'e-mail sera relié à ta connexion (Sign in with Apple).',
-                  style: TextStyle(fontSize: 12, color: _textSecondary),
+                  style: GoogleFonts.montserrat(
+                      fontSize: 11, color: _textSecondary, height: 1.4),
                 ),
               ],
             ),
           ),
           const SizedBox(height: 18),
-          // --- Section Tap Back ---
-          const Padding(
-            padding: EdgeInsets.fromLTRB(4, 0, 4, 8),
+          // Tap Back
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
             child: Text('Tap Back',
-                style: TextStyle(
-                    fontSize: 15,
+                style: GoogleFonts.montserrat(
+                    fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: _textSecondary)),
+                    color: _textSecondary,
+                    letterSpacing: 0.5)),
           ),
           Container(
             padding: const EdgeInsets.all(16),
@@ -1008,36 +1127,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Row(
+                Row(
                   children: [
-                    Icon(Icons.touch_app_outlined, color: Colors.white70, size: 20),
-                    SizedBox(width: 10),
+                    const Icon(Icons.touch_app_outlined,
+                        color: _textPrimary, size: 20),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         'Fenêtre de commande rapide',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                        style: GoogleFonts.montserrat(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: _textPrimary),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  'Ouvre la mini-fenêtre Shortist comme si tu tapotais l\'arrière de ton iPhone. Pratique pour tester sans configurer Back Tap.',
-                  style: TextStyle(fontSize: 13, color: _textSecondary, height: 1.5),
+                Text(
+                  'Ouvre la mini-fenêtre Shortist comme si tu tapotais l\'arrière de ton iPhone.',
+                  style: GoogleFonts.montserrat(
+                      fontSize: 13, color: _textSecondary, height: 1.5),
                 ),
                 const SizedBox(height: 14),
                 PressPop(
                   child: ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.black,
-                      minimumSize: const Size.fromHeight(48),
+                      backgroundColor: _textPrimary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      minimumSize: const Size.fromHeight(50),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14)),
+                          borderRadius: BorderRadius.circular(16)),
                     ),
                     icon: const Icon(Icons.smart_button_outlined, size: 20),
-                    label: const Text('Tester Tap Back',
-                        style: TextStyle(fontWeight: FontWeight.w700)),
+                    label: Text('Tester Tap Back',
+                        style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w700)),
                     onPressed: () => tapBackTrigger.value++,
                   ),
                 ),
@@ -1045,15 +1171,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 18),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(4, 0, 4, 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
             child: Text('Informations & documents',
-                style: TextStyle(
-                    fontSize: 15,
+                style: GoogleFonts.montserrat(
+                    fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: _textSecondary)),
+                    color: _textSecondary,
+                    letterSpacing: 0.5)),
           ),
-          // --- Documents obligatoires ---
           ..._legalDocs.map((d) => Container(
                 margin: const EdgeInsets.only(bottom: 8),
                 decoration: _card,
@@ -1062,26 +1188,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   data: Theme.of(context)
                       .copyWith(dividerColor: Colors.transparent),
                   child: ExpansionTile(
-                    iconColor: Colors.white,
-                    collapsedIconColor: _textSecondary,
                     title: Text(d.$1,
-                        style: const TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.w500)),
+                        style: GoogleFonts.montserrat(
+                            fontSize: 14, fontWeight: FontWeight.w500)),
                     childrenPadding:
                         const EdgeInsets.fromLTRB(16, 0, 16, 14),
                     expandedCrossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(d.$2,
-                          style: const TextStyle(
-                              color: _textSecondary, height: 1.5)),
+                          style: GoogleFonts.montserrat(
+                              fontSize: 13,
+                              color: _textSecondary,
+                              height: 1.5)),
                     ],
                   ),
                 ),
               )),
           const SizedBox(height: 10),
-          const Center(
+          Center(
             child: Text('Shortist — v1.0.0',
-                style: TextStyle(fontSize: 12, color: Colors.white38)),
+                style: GoogleFonts.montserrat(
+                    fontSize: 11, color: _textSecondary)),
           ),
         ],
       ),
@@ -1093,12 +1220,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return TextField(
       controller: c,
       keyboardType: keyboard,
-      style: const TextStyle(color: Colors.white),
+      style: GoogleFonts.montserrat(color: _textPrimary),
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: const TextStyle(color: Colors.white38),
+        hintStyle: GoogleFonts.montserrat(color: _textSecondary),
         filled: true,
-        fillColor: Colors.white10,
+        fillColor: _surfaceStrong,
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
         border: OutlineInputBorder(
@@ -1110,11 +1237,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 }
 
-// --- Helpers partagés des feuilles d'ajout (Agenda / Carnet) ---
+// ============================================================
+// Helpers partagés feuilles d'ajout (Agenda / Carnet)
+// ============================================================
 
 String _monthShort(int m) {
-  const names = ['', 'janv', 'févr', 'mars', 'avr', 'mai', 'juin', 'juil',
-    'août', 'sept', 'oct', 'nov', 'déc'];
+  const names = [
+    '', 'janv', 'févr', 'mars', 'avr', 'mai', 'juin',
+    'juil', 'août', 'sept', 'oct', 'nov', 'déc'
+  ];
   return names[m];
 }
 
@@ -1123,12 +1254,14 @@ void _showSheet(BuildContext context, String title,
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
-    backgroundColor: const Color(0xFF15151A),
+    backgroundColor: _surface,
     shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
     builder: (ctx) => Padding(
       padding: EdgeInsets.only(
-          left: 18, right: 18, top: 14,
+          left: 18,
+          right: 18,
+          top: 14,
           bottom: MediaQuery.of(ctx).viewInsets.bottom + 22),
       child: StatefulBuilder(
         builder: (ctx, setSheet) => Column(
@@ -1137,16 +1270,19 @@ void _showSheet(BuildContext context, String title,
           children: [
             Center(
               child: Container(
-                width: 38, height: 5,
+                width: 38,
+                height: 5,
                 margin: const EdgeInsets.only(bottom: 12),
                 decoration: BoxDecoration(
-                    color: Colors.white24,
+                    color: _border,
                     borderRadius: BorderRadius.circular(3)),
               ),
             ),
             Text(title,
-                style: const TextStyle(
-                    fontSize: 18, fontWeight: FontWeight.w700)),
+                style: GoogleFonts.montserrat(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: _textPrimary)),
             const SizedBox(height: 12),
             ...body(setSheet),
           ],
@@ -1156,17 +1292,19 @@ void _showSheet(BuildContext context, String title,
   );
 }
 
-Widget _sheetField(TextEditingController c, String hint, {int maxLines = 1}) {
+Widget _sheetField(TextEditingController c, String hint,
+    {int maxLines = 1}) {
   return TextField(
     controller: c,
     maxLines: maxLines,
-    style: const TextStyle(color: Colors.white),
+    style: GoogleFonts.montserrat(color: _textPrimary),
     decoration: InputDecoration(
       hintText: hint,
-      hintStyle: const TextStyle(color: Colors.white38),
+      hintStyle: GoogleFonts.montserrat(color: _textSecondary),
       filled: true,
-      fillColor: Colors.white10,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+      fillColor: _surfaceStrong,
+      contentPadding:
+          const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
         borderSide: BorderSide.none,
@@ -1179,23 +1317,29 @@ Widget _sheetPrimary(String label, VoidCallback onTap) {
   return PressPop(
     child: ElevatedButton(
       style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        minimumSize: const Size.fromHeight(50),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        backgroundColor: _textPrimary,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        minimumSize: const Size.fromHeight(52),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
       onPressed: onTap,
-      child: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+      child: Text(label,
+          style:
+              GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 15)),
     ),
   );
 }
 
-/// Ligne "choisir date + heure" utilisée dans les feuilles d'ajout.
 class _DateTimeRow extends StatelessWidget {
   final DateTime? when;
   final bool optional;
   final ValueChanged<DateTime> onPick;
-  const _DateTimeRow({required this.when, required this.onPick, this.optional = false});
+  const _DateTimeRow(
+      {required this.when,
+      required this.onPick,
+      this.optional = false});
 
   @override
   Widget build(BuildContext context) {
@@ -1205,30 +1349,33 @@ class _DateTimeRow extends StatelessWidget {
             '${when!.hour.toString().padLeft(2, '0')}:${when!.minute.toString().padLeft(2, '0')}';
     return PressPop(
       child: OutlinedButton.icon(
-      style: OutlinedButton.styleFrom(
-        foregroundColor: Colors.white,
-        side: const BorderSide(color: Colors.white24),
-        minimumSize: const Size.fromHeight(48),
-        alignment: Alignment.centerLeft,
-      ),
-      icon: const Icon(Icons.schedule),
-      label: Text(label),
-      onPressed: () async {
-        final now = DateTime.now();
-        final d = await showDatePicker(
-          context: context,
-          initialDate: when ?? now,
-          firstDate: now.subtract(const Duration(days: 1)),
-          lastDate: now.add(const Duration(days: 365 * 3)),
-        );
-        if (d == null || !context.mounted) return;
-        final t = await showTimePicker(
-          context: context,
-          initialTime: TimeOfDay.fromDateTime(when ?? now),
-        );
-        if (t == null) return;
-        onPick(DateTime(d.year, d.month, d.day, t.hour, t.minute));
-      },
+        style: OutlinedButton.styleFrom(
+          foregroundColor: _textPrimary,
+          side: const BorderSide(color: _border),
+          minimumSize: const Size.fromHeight(48),
+          alignment: Alignment.centerLeft,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14)),
+        ),
+        icon: const Icon(Icons.schedule),
+        label: Text(label,
+            style: GoogleFonts.montserrat(fontWeight: FontWeight.w500)),
+        onPressed: () async {
+          final now = DateTime.now();
+          final d = await showDatePicker(
+            context: context,
+            initialDate: when ?? now,
+            firstDate: now.subtract(const Duration(days: 1)),
+            lastDate: now.add(const Duration(days: 365 * 3)),
+          );
+          if (d == null || !context.mounted) return;
+          final t = await showTimePicker(
+            context: context,
+            initialTime: TimeOfDay.fromDateTime(when ?? now),
+          );
+          if (t == null) return;
+          onPick(DateTime(d.year, d.month, d.day, t.hour, t.minute));
+        },
       ),
     );
   }
@@ -1241,7 +1388,6 @@ class _DateTimeRow extends StatelessWidget {
 enum _Mode { choices, note, todo, reading }
 
 class CommandPanel extends StatefulWidget {
-  /// Ouvre l'app sur un onglet (0 = Notes, 1 = To-Do, 2 = À lire).
   final void Function(int index) onOpenTab;
   const CommandPanel({super.key, required this.onOpenTab});
   @override
@@ -1254,10 +1400,10 @@ class _CommandPanelState extends State<CommandPanel> {
   final _noteTitle = TextEditingController();
   final _noteBody = TextEditingController();
   final _todoText = TextEditingController();
-
-  // « À lire » : un ou plusieurs champs + choix de rappel.
-  final List<TextEditingController> _readControllers = [TextEditingController()];
-  String _remindKey = ''; // '' = aucun rappel (par défaut)
+  final List<TextEditingController> _readControllers = [
+    TextEditingController()
+  ];
+  String _remindKey = '';
   DateTime? _customDateTime;
 
   static const _remindOptions = [
@@ -1288,19 +1434,32 @@ class _CommandPanelState extends State<CommandPanel> {
       child: Align(
         alignment: Alignment.topCenter,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
           child: Material(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(24),
-            elevation: 12,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: AnimatedSize(
-                duration: const Duration(milliseconds: 280),
-                curve: Curves.easeOutCubic,
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 220),
-                  child: _buildMode(),
+            borderRadius: BorderRadius.circular(26),
+            elevation: 0,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(26),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.12),
+                    blurRadius: 30,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: AnimatedSize(
+                  duration: const Duration(milliseconds: 280),
+                  curve: Curves.easeOutCubic,
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 220),
+                    child: _buildMode(),
+                  ),
                 ),
               ),
             ),
@@ -1328,10 +1487,10 @@ class _CommandPanelState extends State<CommandPanel> {
       key: const ValueKey('choices'),
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Padding(
-          padding: EdgeInsets.only(bottom: 8),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
           child: Text('Shortist',
-              style: TextStyle(
+              style: GoogleFonts.montserrat(
                   color: Colors.black,
                   fontSize: 15,
                   fontWeight: FontWeight.w800,
@@ -1339,9 +1498,11 @@ class _CommandPanelState extends State<CommandPanel> {
         ),
         Row(
           children: [
-            _cmd(Icons.edit_note, 'Note', () => setState(() => _mode = _Mode.note)),
+            _cmd(Icons.edit_note, 'Note',
+                () => setState(() => _mode = _Mode.note)),
             const SizedBox(width: 8),
-            _cmd(Icons.add_task, 'To-Do', () => setState(() => _mode = _Mode.todo)),
+            _cmd(Icons.add_task, 'To-Do',
+                () => setState(() => _mode = _Mode.todo)),
             const SizedBox(width: 8),
             _cmd(Icons.bookmark_add_outlined, 'À lire',
                 () => setState(() => _mode = _Mode.reading)),
@@ -1371,7 +1532,7 @@ class _CommandPanelState extends State<CommandPanel> {
 
   Widget _cmd(IconData icon, String label, VoidCallback onTap) {
     return Expanded(
-      child: _WhiteButton(
+      child: _PanelButton(
         onTap: onTap,
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1379,8 +1540,8 @@ class _CommandPanelState extends State<CommandPanel> {
             Icon(icon, size: 23, color: Colors.black),
             const SizedBox(height: 4),
             Text(label,
-                style: const TextStyle(
-                    fontSize: 12.5,
+                style: GoogleFonts.montserrat(
+                    fontSize: 12,
                     fontWeight: FontWeight.w600,
                     color: Colors.black)),
           ],
@@ -1390,7 +1551,7 @@ class _CommandPanelState extends State<CommandPanel> {
   }
 
   Widget _cmdWide(IconData icon, String label, VoidCallback onTap) {
-    return _WhiteButton(
+    return _PanelButton(
       onTap: onTap,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -1398,8 +1559,10 @@ class _CommandPanelState extends State<CommandPanel> {
           Icon(icon, size: 20, color: Colors.black),
           const SizedBox(width: 8),
           Text(label,
-              style: const TextStyle(
-                  fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black)),
+              style: GoogleFonts.montserrat(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black)),
         ],
       ),
     );
@@ -1424,8 +1587,10 @@ class _CommandPanelState extends State<CommandPanel> {
         ),
         const SizedBox(width: 10),
         Text(title,
-            style: const TextStyle(
-                fontSize: 17, fontWeight: FontWeight.w700, color: Colors.black)),
+            style: GoogleFonts.montserrat(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: Colors.black)),
       ],
     );
   }
@@ -1472,7 +1637,8 @@ class _CommandPanelState extends State<CommandPanel> {
         _primary('Ajouter', () {
           final text = _todoText.text.trim();
           if (text.isEmpty) return;
-          store.addTodo(Todo(id: _uid(), createdAt: DateTime.now(), text: text));
+          store.addTodo(
+              Todo(id: _uid(), createdAt: DateTime.now(), text: text));
           _close();
         }),
       ],
@@ -1487,9 +1653,10 @@ class _CommandPanelState extends State<CommandPanel> {
       children: [
         _head('À lire plus tard'),
         const SizedBox(height: 8),
-        const Text(
-          'Garde un lien ou un texte à lire plus tard. Ajoute-en autant que tu veux, et programme un rappel.',
-          style: TextStyle(color: Colors.black54, fontSize: 13, height: 1.4),
+        Text(
+          'Garde un lien ou un texte à lire plus tard. Programme un rappel.',
+          style: GoogleFonts.montserrat(
+              color: Colors.black54, fontSize: 13, height: 1.4),
         ),
         const SizedBox(height: 10),
         for (int i = 0; i < _readControllers.length; i++) ...[
@@ -1501,12 +1668,15 @@ class _CommandPanelState extends State<CommandPanel> {
         Align(
           alignment: Alignment.centerLeft,
           child: _chip('＋ Ajouter',
-              () => setState(() => _readControllers.add(TextEditingController()))),
+              () => setState(
+                  () => _readControllers.add(TextEditingController()))),
         ),
         const SizedBox(height: 14),
-        const Text('⏰ Me le rappeler',
-            style: TextStyle(
-                fontWeight: FontWeight.w700, color: Colors.black, fontSize: 14)),
+        Text('⏰ Me le rappeler',
+            style: GoogleFonts.montserrat(
+                fontWeight: FontWeight.w700,
+                color: Colors.black,
+                fontSize: 14)),
         const SizedBox(height: 8),
         Wrap(spacing: 7, runSpacing: 7, children: _remindChips()),
         const SizedBox(height: 14),
@@ -1523,13 +1693,13 @@ class _CommandPanelState extends State<CommandPanel> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: on ? const Color(0xFF0A0A0C) : Colors.white,
+            color: on ? const Color(0xFF1C1C2E) : Colors.white,
             border: Border.all(
-                color: on ? const Color(0xFF0A0A0C) : Colors.black12),
+                color: on ? const Color(0xFF1C1C2E) : Colors.black12),
             borderRadius: BorderRadius.circular(11),
           ),
           child: Text(label,
-              style: TextStyle(
+              style: GoogleFonts.montserrat(
                   color: on ? Colors.white : Colors.black,
                   fontWeight: FontWeight.w600,
                   fontSize: 13)),
@@ -1538,7 +1708,8 @@ class _CommandPanelState extends State<CommandPanel> {
     }
 
     final widgets = _remindOptions
-        .map((o) => chip(o.$1, o.$2, () => setState(() => _remindKey = o.$1)))
+        .map((o) =>
+            chip(o.$1, o.$2, () => setState(() => _remindKey = o.$1)))
         .toList();
     final customLabel = _customDateTime == null
         ? '🗓️ Personnaliser'
@@ -1558,12 +1729,13 @@ class _CommandPanelState extends State<CommandPanel> {
     if (date == null || !mounted) return;
     final time = await showTimePicker(
       context: context,
-      initialTime: TimeOfDay.fromDateTime(now.add(const Duration(hours: 1))),
+      initialTime:
+          TimeOfDay.fromDateTime(now.add(const Duration(hours: 1))),
     );
     if (time == null || !mounted) return;
     setState(() {
-      _customDateTime =
-          DateTime(date.year, date.month, date.day, time.hour, time.minute);
+      _customDateTime = DateTime(
+          date.year, date.month, date.day, time.hour, time.minute);
       _remindKey = 'custom';
     });
   }
@@ -1600,7 +1772,10 @@ class _CommandPanelState extends State<CommandPanel> {
     if (remindAt != null) Notifications.requestPermission();
     for (final text in texts) {
       final item = ReadItem(
-          id: _uid(), createdAt: DateTime.now(), text: text, remindAt: remindAt);
+          id: _uid(),
+          createdAt: DateTime.now(),
+          text: text,
+          remindAt: remindAt);
       store.addReading(item);
       if (remindAt != null) {
         Notifications.schedule(
@@ -1612,12 +1787,14 @@ class _CommandPanelState extends State<CommandPanel> {
   }
 
   Widget _chip(String label, VoidCallback onTap) {
-    return _WhiteButton(
+    return _PanelButton(
       onTap: onTap,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
       child: Text(label,
-          style: const TextStyle(
-              color: Colors.black, fontWeight: FontWeight.w600, fontSize: 13)),
+          style: GoogleFonts.montserrat(
+              color: Colors.black,
+              fontWeight: FontWeight.w600,
+              fontSize: 13)),
     );
   }
 
@@ -1627,13 +1804,14 @@ class _CommandPanelState extends State<CommandPanel> {
       controller: c,
       autofocus: autofocus,
       maxLines: maxLines,
-      style: const TextStyle(color: Colors.black, fontSize: 16),
+      style:
+          GoogleFonts.montserrat(color: Colors.black, fontSize: 16),
       textInputAction:
           maxLines > 1 ? TextInputAction.newline : TextInputAction.done,
       onSubmitted: onSubmit == null ? null : (_) => onSubmit(),
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: const TextStyle(color: Colors.black38),
+        hintStyle: GoogleFonts.montserrat(color: Colors.black38),
         filled: true,
         fillColor: const Color(0xFFF1F1F4),
         contentPadding:
@@ -1647,20 +1825,25 @@ class _CommandPanelState extends State<CommandPanel> {
   }
 
   Widget _primary(String label, VoidCallback onTap) {
-    return _WhiteButton(
+    return _PanelButton(
       onTap: onTap,
-      filledBlack: true,
+      filledDark: true,
       padding: const EdgeInsets.symmetric(vertical: 15),
       child: Text(label,
           textAlign: TextAlign.center,
-          style: const TextStyle(
-              color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16)),
+          style: GoogleFonts.montserrat(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+              fontSize: 16)),
     );
   }
 }
 
-/// Enveloppe n'importe quel bouton/élément tappable d'un effet « pop »
-/// (léger rétrécissement) à l'appui, sans intercepter le geste du child.
+// ============================================================
+// Composants d'interaction
+// ============================================================
+
+/// Effet « pop » léger à l'appui (scale).
 class PressPop extends StatefulWidget {
   final Widget child;
   const PressPop({super.key, required this.child});
@@ -1674,7 +1857,7 @@ class _PressPopState extends State<PressPop> {
   @override
   Widget build(BuildContext context) {
     return Listener(
-      onPointerDown: (_) => _set(0.9),
+      onPointerDown: (_) => _set(0.93),
       onPointerUp: (_) => _set(1),
       onPointerCancel: (_) => _set(1),
       child: AnimatedScale(
@@ -1687,28 +1870,29 @@ class _PressPopState extends State<PressPop> {
   }
 }
 
-/// Bouton blanc (ou noir si `filledBlack`) avec effet de pression.
-class _WhiteButton extends StatefulWidget {
+/// Bouton utilisé dans le CommandPanel (fond blanc ou sombre).
+class _PanelButton extends StatefulWidget {
   final Widget child;
   final VoidCallback onTap;
-  final bool filledBlack;
+  final bool filledDark;
   final EdgeInsets padding;
-  const _WhiteButton({
+  const _PanelButton({
     required this.child,
     required this.onTap,
-    this.filledBlack = false,
-    this.padding = const EdgeInsets.symmetric(vertical: 11, horizontal: 4),
+    this.filledDark = false,
+    this.padding =
+        const EdgeInsets.symmetric(vertical: 11, horizontal: 4),
   });
   @override
-  State<_WhiteButton> createState() => _WhiteButtonState();
+  State<_PanelButton> createState() => _PanelButtonState();
 }
 
-class _WhiteButtonState extends State<_WhiteButton> {
+class _PanelButtonState extends State<_PanelButton> {
   double _scale = 1;
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTapDown: (_) => setState(() => _scale = 0.92),
+      onTapDown: (_) => setState(() => _scale = 0.93),
       onTapCancel: () => setState(() => _scale = 1),
       onTapUp: (_) => setState(() => _scale = 1),
       onTap: widget.onTap,
@@ -1718,19 +1902,22 @@ class _WhiteButtonState extends State<_WhiteButton> {
         child: Container(
           padding: widget.padding,
           decoration: BoxDecoration(
-            color: widget.filledBlack ? const Color(0xFF0A0A0C) : Colors.white,
-            borderRadius: BorderRadius.circular(15),
-            border: widget.filledBlack
+            color: widget.filledDark
+                ? const Color(0xFF1C1C2E)
+                : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: widget.filledDark
                 ? null
-                : Border.all(color: Colors.black.withValues(alpha: 0.10)),
-            boxShadow: widget.filledBlack
-                ? null
-                : [
-                    BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.07),
-                        blurRadius: 3,
-                        offset: const Offset(0, 1))
-                  ],
+                : Border.all(
+                    color: Colors.black.withValues(alpha: 0.08)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black
+                    .withValues(alpha: widget.filledDark ? 0.18 : 0.07),
+                blurRadius: widget.filledDark ? 8 : 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           child: widget.child,
         ),

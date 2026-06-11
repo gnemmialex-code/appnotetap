@@ -142,14 +142,14 @@ enum ShortistNativeStore {
   }
 
   /// Mêmes règles que `Store.quickPanelTodos` (Dart) : tâches non faites,
-  /// ou faites depuis moins de 30 min ; les 5 premières.
+  /// ou faites depuis moins de 10 min ; les 5 premières.
   static func quickPanelTodos() -> [PanelTodo] {
     loadList(todosKey)
       .filter { dict in
         let done = dict["done"] as? Bool ?? false
         if !done { return true }
         guard let doneAt = parseDartDate(dict["doneAt"]) else { return false }
-        return Date().timeIntervalSince(doneAt) < 30 * 60
+        return Date().timeIntervalSince(doneAt) < 10 * 60
       }
       .prefix(5)
       .map {
@@ -206,7 +206,7 @@ struct PanelView: View {
         actionTile(intent: AddPanelReadingIntent(), icon: "bookmark", label: "À lire")
       }
 
-      // « Dernières tâches » : coche directe, règle des 30 min côté store.
+      // « Dernières tâches » : coche directe, règle des 10 min côté store.
       if !todos.isEmpty {
         VStack(alignment: .leading, spacing: 6) {
           Text("Dernières tâches")

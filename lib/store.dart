@@ -123,7 +123,7 @@ class Store extends ChangeNotifier {
   }
 
   /// Les 5 dernières tâches à montrer dans la petite fenêtre rapide
-  /// (les tâches cochées depuis plus de 30 min en sont exclues).
+  /// (les tâches cochées depuis plus de 10 min en sont exclues).
   List<Todo> get quickPanelTodos =>
       todos.where((t) => t.visibleInQuickPanel).take(5).toList();
 

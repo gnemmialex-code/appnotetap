@@ -52,14 +52,14 @@ class Todo {
   /// Durée pendant laquelle une tâche cochée reste visible dans la
   /// petite fenêtre rapide avant d'en disparaître (elle reste dans
   /// l'historique de l'accueil de l'app).
-  static const panelLinger = Duration(minutes: 30);
+  static const panelLinger = Duration(minutes: 10);
 
   /// Vrai si la tâche est terminée depuis plus de 24 h
   /// (donc à retirer de la liste active mais à conserver dans l'archive).
   bool get archived =>
       done && doneAt != null && DateTime.now().difference(doneAt!).inHours >= 24;
 
-  /// Visible dans la petite fenêtre : non faite, ou faite depuis < 30 min.
+  /// Visible dans la petite fenêtre : non faite, ou faite depuis < 10 min.
   bool get visibleInQuickPanel =>
       !done ||
       (doneAt != null && DateTime.now().difference(doneAt!) < panelLinger);

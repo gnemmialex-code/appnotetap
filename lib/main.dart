@@ -1764,7 +1764,7 @@ class _CommandPanelState extends State<CommandPanel> {
   DateTime? _customDateTime;
 
   // Rafraîchit la liste des tâches chaque minute pour faire disparaître
-  // celles cochées depuis plus de 30 min.
+  // celles cochées depuis plus de 10 min.
   Timer? _ticker;
 
   @override
@@ -2131,7 +2131,7 @@ class _CommandPanelState extends State<CommandPanel> {
   }
 
   /// Tâche dans la fenêtre rapide : coche pour marquer « fait ».
-  /// Une tâche cochée disparaît d'ici au bout de 30 min, mais reste
+  /// Une tâche cochée disparaît d'ici au bout de 10 min, mais reste
   /// dans l'historique de l'accueil de l'app.
   Widget _quickTodoTile(Todo t) {
     return Padding(
@@ -2161,7 +2161,7 @@ class _CommandPanelState extends State<CommandPanel> {
                   ),
                 ),
                 if (t.done)
-                  Text('Fait ✓ — disparaîtra d\'ici 30 min',
+                  Text('Fait ✓ — disparaîtra d\'ici 10 min',
                       style: GoogleFonts.montserrat(
                           fontSize: 10, color: Colors.black38)),
               ],

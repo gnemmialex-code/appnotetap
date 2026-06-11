@@ -38,6 +38,11 @@ class Store extends ChangeNotifier {
 
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
+    // Le panneau système (App Intents natifs, ios/Runner/QuickPanel.swift)
+    // écrit directement dans UserDefaults pendant que l'app est en
+    // arrière-plan : on resynchronise le cache avant de lire, sinon la
+    // prochaine sauvegarde écraserait ces ajouts.
+    await prefs.reload();
     notes
       ..clear()
       ..addAll(_decodeList(prefs.getString(_kNotes), Note.fromJson));

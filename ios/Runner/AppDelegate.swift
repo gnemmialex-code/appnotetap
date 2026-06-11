@@ -14,7 +14,8 @@ import AppIntents
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    if #available(iOS 16.0, *) {
+    // Le provider (défini dans QuickPanel.swift) référence le snippet iOS 26.
+    if #available(iOS 26.0, *) {
       ShortistShortcuts.updateAppShortcutParameters()
     }
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
@@ -68,36 +69,8 @@ extension Notification.Name {
   static let shortistTapTrigger = Notification.Name("com.gnemmialex.shortist.tapTrigger")
 }
 
-// MARK: - App Intents (iOS 16+)
-// S'enregistre automatiquement dans la liste Touche arrière → plus besoin de créer un Raccourci manuellement.
-
-#if canImport(AppIntents)
-
-@available(iOS 16.0, *)
-struct OpenShortistIntent: AppIntent {
-  static var title: LocalizedStringResource = "Ouvrir Shortist"
-  static var description = IntentDescription("Ouvre le panneau de commande Shortist")
-  static var openAppWhenRun: Bool = true
-
-  @MainActor
-  func perform() async throws -> some IntentResult {
-    // Marque le flag AVANT de poster la notif (cold start safety)
-    UserDefaults.standard.set(true, forKey: "shortist_tap_pending")
-    NotificationCenter.default.post(name: .shortistTapTrigger, object: nil)
-    return .result()
-  }
-}
-
-@available(iOS 16.0, *)
-struct ShortistShortcuts: AppShortcutsProvider {
-  static var appShortcuts: [AppShortcut] {
-    AppShortcut(
-      intent: OpenShortistIntent(),
-      phrases: ["Ouvrir \(.applicationName)"],
-      shortTitle: "Ouvrir Shortist",
-      systemImageName: "bolt.fill"
-    )
-  }
-}
-
-#endif
+// L'ancien `OpenShortistIntent` (openAppWhenRun = true, qui ouvrait l'app en
+// plein écran) a été remplacé par le panneau snippet iOS 26 : voir
+// QuickPanel.swift (OpenPanelIntent + PanelSnippetIntent + ShortistShortcuts).
+// Le trigger `.shortistTapTrigger` reste utilisé par l'URL scheme
+// shortist://tapback (SceneDelegate) et le canal Flutter ci-dessus.

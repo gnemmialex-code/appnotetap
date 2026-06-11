@@ -137,20 +137,31 @@ class PanelScreen extends StatefulWidget {
   State<PanelScreen> createState() => _PanelScreenState();
 }
 
-class _PanelScreenState extends State<PanelScreen> {
+class _PanelScreenState extends State<PanelScreen>
+    with WidgetsBindingObserver {
   // Changer la clé recrée le panneau (retour au menu de choix).
   int _panelGeneration = 0;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     tapBackTrigger.addListener(_onTapBack);
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     tapBackTrigger.removeListener(_onTapBack);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Au retour au premier plan, recharge le store : le panneau système
+    // (App Intents) a pu ajouter des notes/tâches pendant que l'app
+    // était en arrière-plan.
+    if (state == AppLifecycleState.resumed) store.load();
   }
 
   void _onTapBack() {

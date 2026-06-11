@@ -2,26 +2,15 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>shortist</string>
-			</array>
-		</dict>
-	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>TapBack Note utilise vos photos pour illustrer vos fiches du Carnet.</string>
 	<!-- Accès au Calendrier (section Agenda) -->
 	<key>NSCalendarsUsageDescription</key>
-	<string>TapBack Note accède à votre calendrier pour afficher et créer vos événements depuis l'Agenda.</string>
+	<string>Shortist synchronise l'onglet Agenda avec votre Calendrier : afficher, ajouter, modifier et supprimer vos événements, dans le calendrier de votre choix (iCloud, Google, Outlook…).</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>TapBack Note accède à votre calendrier pour afficher et créer vos événements depuis l'Agenda.</string>
+	<string>Shortist synchronise l'onglet Agenda avec votre Calendrier : afficher, ajouter, modifier et supprimer vos événements, dans le calendrier de votre choix (iCloud, Google, Outlook…).</string>
 	<!-- Accès aux Rappels (section Rappels) -->
 	<key>NSRemindersUsageDescription</key>
 	<string>TapBack Note accède à l'app Rappels pour synchroniser vos rappels.</string>

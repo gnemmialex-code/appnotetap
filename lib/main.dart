@@ -1,16 +1,16 @@
 // TapBack Note — application Flutter.
 // Thème blanc et gris clair, police Montserrat, boutons arrondis avec ombre.
 
-import 'dart:async';
 import 'dart:convert';
-import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show AssetManifest, rootBundle;
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 
-import 'bridge.dart';
+import 'calendar_sync.dart';
 import 'models.dart';
 import 'notifications.dart';
 import 'onboarding.dart';
@@ -20,17 +20,31 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Notifications.init();
   await store.load();
-  initTapBackChannel();
+  await calendarSync.init();
   runApp(const TapBackApp());
 }
 
-// ── Palette ─────────────────────────────────────────────────────────────────
-const _bg            = Color(0xFFF5F5FA);
-const _surface       = Color(0xFFFFFFFF);
-const _surfaceStrong = Color(0xFFEEEEF6);
-const _textPrimary   = Color(0xFF1C1C2E);
-const _textSecondary = Color(0xFF888898);
-const _border        = Color(0xFFEAEAF2);
+// ── Palette (clair / sombre) ────────────────────────────────────────────────
+// `_themeT` est animé de 0 (clair) à 1 (sombre) par _TapBackAppState : toutes
+// les couleurs ci-dessous sont interpolées à chaque frame, ce qui rend la
+// bascule de thème fluide sur l'ensemble de l'interface.
+double _themeT = 0;
+
+Color _mix(int light, int dark) =>
+    Color.lerp(Color(light), Color(dark), _themeT)!;
+
+Color get _bg            => _mix(0xFFF5F5FA, 0xFF15151B);
+Color get _surface       => _mix(0xFFFFFFFF, 0xFF1E1E27);
+Color get _surfaceStrong => _mix(0xFFEEEEF6, 0xFF2A2A35);
+Color get _textPrimary   => _mix(0xFF1C1C2E, 0xFFF2F2F7);
+Color get _textSecondary => _mix(0xFF888898, 0xFF9A9AAA);
+Color get _border        => _mix(0xFFEAEAF2, 0xFF33333E);
+Color get _textFaint     => _mix(0xFFBBBBCC, 0xFF6C6C7A);
+Color get _iconFaint     => _mix(0xFFCCCCE0, 0xFF4A4A58);
+
+/// Couleur posée SUR un fond `_textPrimary` (boutons pleins) :
+/// blanc en mode clair, sombre en mode sombre.
+Color get _onPrimary     => _mix(0xFFFFFFFF, 0xFF15151B);
 
 String _uid() => DateTime.now().microsecondsSinceEpoch.toRadixString(36);
 
@@ -49,24 +63,68 @@ bool get _needsOnboarding =>
     defaultTargetPlatform == TargetPlatform.iOS &&
     !store.backTapSetupDone;
 
-class TapBackApp extends StatelessWidget {
+class TapBackApp extends StatefulWidget {
   const TapBackApp({super.key});
+  @override
+  State<TapBackApp> createState() => _TapBackAppState();
+}
+
+class _TapBackAppState extends State<TapBackApp>
+    with SingleTickerProviderStateMixin {
+  // Anime la bascule clair ↔ sombre : chaque frame met à jour `_themeT`
+  // et reconstruit l'arbre, donc toutes les couleurs glissent en douceur.
+  late final AnimationController _theme = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 380),
+    value: store.darkMode ? 1 : 0,
+  )..addListener(() => setState(() => _themeT = _theme.value));
+
+  @override
+  void initState() {
+    super.initState();
+    _themeT = store.darkMode ? 1 : 0;
+    store.addListener(_onStoreChanged);
+  }
+
+  void _onStoreChanged() {
+    final target = store.darkMode ? 1.0 : 0.0;
+    if (_theme.value != target) {
+      _theme.animateTo(target, curve: Curves.easeInOutCubic);
+    }
+  }
+
+  @override
+  void dispose() {
+    store.removeListener(_onStoreChanged);
+    _theme.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final textTheme =
-        GoogleFonts.montserratTextTheme(ThemeData.light().textTheme);
+    final dark = _themeT > 0.5;
+    final textTheme = GoogleFonts.montserratTextTheme(
+        (dark ? ThemeData.dark() : ThemeData.light()).textTheme);
+    final scheme = dark
+        ? ColorScheme.dark(
+            surface: _bg,
+            primary: _textPrimary,
+            onPrimary: _onPrimary,
+            secondary: _textPrimary,
+            onSecondary: _onPrimary,
+          )
+        : ColorScheme.light(
+            surface: _bg,
+            primary: _textPrimary,
+            onPrimary: _onPrimary,
+            secondary: _textPrimary,
+            onSecondary: _onPrimary,
+          );
     final base = ThemeData(
       useMaterial3: true,
-      brightness: Brightness.light,
+      brightness: dark ? Brightness.dark : Brightness.light,
       scaffoldBackgroundColor: _bg,
-      colorScheme: const ColorScheme.light(
-        surface: _bg,
-        primary: _textPrimary,
-        onPrimary: Colors.white,
-        secondary: _textPrimary,
-        onSecondary: Colors.white,
-      ),
+      colorScheme: scheme,
       textTheme: textTheme,
       // NavigationBar (barre du bas)
       navigationBarTheme: NavigationBarThemeData(
@@ -77,12 +135,12 @@ class TapBackApp extends StatelessWidget {
         iconTheme: WidgetStateProperty.resolveWith((states) {
           final sel = states.contains(WidgetState.selected);
           return IconThemeData(
-              color: sel ? _textPrimary : _textSecondary, size: 24);
+              color: sel ? _textPrimary : _textSecondary, size: 27);
         }),
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           final sel = states.contains(WidgetState.selected);
           return GoogleFonts.montserrat(
-            fontSize: 11,
+            fontSize: 12,
             fontWeight: sel ? FontWeight.w700 : FontWeight.w500,
             color: sel ? _textPrimary : _textSecondary,
           );
@@ -93,9 +151,9 @@ class TapBackApp extends StatelessWidget {
         labelColor: _textPrimary,
         unselectedLabelColor: _textSecondary,
         labelStyle:
-            GoogleFonts.montserrat(fontSize: 14, fontWeight: FontWeight.w700),
+            GoogleFonts.montserrat(fontSize: 15, fontWeight: FontWeight.w700),
         unselectedLabelStyle:
-            GoogleFonts.montserrat(fontSize: 14, fontWeight: FontWeight.w500),
+            GoogleFonts.montserrat(fontSize: 15, fontWeight: FontWeight.w500),
         indicator: BoxDecoration(
           color: _textPrimary.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(12),
@@ -103,7 +161,7 @@ class TapBackApp extends StatelessWidget {
         indicatorSize: TabBarIndicatorSize.tab,
         dividerColor: Colors.transparent,
       ),
-      expansionTileTheme: const ExpansionTileThemeData(
+      expansionTileTheme: ExpansionTileThemeData(
         iconColor: _textPrimary,
         collapsedIconColor: _textSecondary,
         textColor: _textPrimary,
@@ -114,234 +172,21 @@ class TapBackApp extends StatelessWidget {
       title: 'Shortist',
       debugShowCheckedModeBanner: false,
       theme: base,
+      // Dates, sélecteurs (jours, mois…) et boutons système en français.
+      locale: const Locale('fr'),
+      supportedLocales: const [Locale('fr'), Locale('en')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       initialRoute: _needsOnboarding ? '/onboarding' : '/app',
       routes: {
         '/onboarding': (_) => const OnboardingScreen(),
-        // L'écran racine est la petite fenêtre rapide : l'accueil complet
-        // (HomePage) n'est accessible que via le bouton flèche du panneau.
-        '/app': (_) => const PanelScreen(),
+        // Ouvrir l'app (icône ou bouton « Ouvrir l'application » du panneau
+        // système) mène DIRECTEMENT à l'accueil complet, onglet Capture.
+        '/app': (_) => const HomePage(),
       },
-    );
-  }
-}
-
-// ============================================================
-// Écran racine : la petite fenêtre rapide, seule visible.
-// Le reste de l'écran est neutre (sombre) — l'accueil complet de
-// l'app ne s'ouvre que via le bouton flèche du panneau.
-// ============================================================
-
-class PanelScreen extends StatefulWidget {
-  const PanelScreen({super.key});
-  @override
-  State<PanelScreen> createState() => _PanelScreenState();
-}
-
-class _PanelScreenState extends State<PanelScreen>
-    with WidgetsBindingObserver {
-  // Changer la clé recrée le panneau (retour au menu de choix).
-  int _panelGeneration = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    tapBackTrigger.addListener(_onTapBack);
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    tapBackTrigger.removeListener(_onTapBack);
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Au retour au premier plan, recharge le store : le panneau système
-    // (App Intents) a pu ajouter des notes/tâches pendant que l'app
-    // était en arrière-plan.
-    if (state == AppLifecycleState.resumed) store.load();
-  }
-
-  void _onTapBack() {
-    if (!mounted) return;
-    // Si l'accueil de l'app (ou autre) est ouvert, on revient au panneau,
-    // et on remet le panneau sur l'écran de choix.
-    Navigator.of(context).popUntil((r) => r.isFirst);
-    setState(() => _panelGeneration++);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: ListenableBuilder(
-        listenable: store,
-        builder: (context, _) {
-          return Stack(
-            fit: StackFit.expand,
-            children: [
-              // iOS ne permet pas de voir le vrai écran d'accueil derrière
-              // une app. Si l'utilisateur a fourni une capture de SON écran
-              // d'accueil (Réglages), on l'affiche : rendu identique à de la
-              // transparence. Sinon, accueil simulé par défaut.
-              if (store.panelWallpaperB64 != null)
-                Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    Image.memory(
-                      base64Decode(store.panelWallpaperB64!),
-                      fit: BoxFit.cover,
-                      gaplessPlayback: true,
-                    ),
-                    // Léger voile pour faire ressortir la fenêtre blanche.
-                    Container(color: Colors.black.withValues(alpha: 0.22)),
-                  ],
-                )
-              else
-                const _FakeHomeBackground(),
-              CommandPanel(key: ValueKey(_panelGeneration)),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
-/// Faux écran d'accueil iPhone : fond d'écran dégradé, grille d'icônes
-/// et dock, le tout flouté + voile sombre. Purement décoratif et fixe.
-class _FakeHomeBackground extends StatelessWidget {
-  const _FakeHomeBackground();
-
-  static const _apps = <(IconData, Color)>[
-    (Icons.phone, Color(0xFF34C759)),
-    (Icons.chat_bubble, Color(0xFF30B0C7)),
-    (Icons.camera_alt, Color(0xFF8E8E93)),
-    (Icons.photo, Color(0xFFFF9F0A)),
-    (Icons.map, Color(0xFF32ADE6)),
-    (Icons.music_note, Color(0xFFFF2D55)),
-    (Icons.mail, Color(0xFF007AFF)),
-    (Icons.cloud, Color(0xFF5AC8FA)),
-    (Icons.calendar_today, Color(0xFFFF3B30)),
-    (Icons.alarm, Color(0xFF1C1C1E)),
-    (Icons.settings, Color(0xFF636366)),
-    (Icons.account_balance_wallet, Color(0xFF0A0A0A)),
-    (Icons.tv, Color(0xFF2C2C2E)),
-    (Icons.fitness_center, Color(0xFFFF375F)),
-    (Icons.podcasts, Color(0xFFBF5AF2)),
-    (Icons.newspaper, Color(0xFFFF453A)),
-    (Icons.calculate, Color(0xFFFF9500)),
-    (Icons.mic, Color(0xFF5856D6)),
-    (Icons.book, Color(0xFFFF9F0A)),
-    (Icons.videocam, Color(0xFF34C759)),
-  ];
-
-  Widget _icon((IconData, Color) app, {double size = 54, bool label = true}) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [app.$2.withValues(alpha: 0.95), app.$2],
-            ),
-            borderRadius: BorderRadius.circular(size * 0.24),
-          ),
-          child: Icon(app.$1, color: Colors.white, size: size * 0.5),
-        ),
-        if (label) ...[
-          const SizedBox(height: 7),
-          Container(
-            width: 34,
-            height: 5,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.55),
-              borderRadius: BorderRadius.circular(3),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        ImageFiltered(
-          imageFilter: ImageFilter.blur(sigmaX: 3, sigmaY: 3),
-          child: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF1B2A6B),
-                  Color(0xFF4A3A8C),
-                  Color(0xFF1A4A7A),
-                ],
-              ),
-            ),
-            child: SafeArea(
-              child: Column(
-                children: [
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 26, vertical: 14),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          for (int row = 0; row < 5; row++)
-                            Row(
-                              mainAxisAlignment:
-                                  MainAxisAlignment.spaceBetween,
-                              children: [
-                                for (int col = 0; col < 4; col++)
-                                  _icon(_apps[row * 4 + col]),
-                              ],
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  // Dock
-                  Container(
-                    margin: const EdgeInsets.fromLTRB(14, 4, 14, 8),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.16),
-                      borderRadius: BorderRadius.circular(32),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        _icon((Icons.phone, const Color(0xFF34C759)),
-                            label: false),
-                        _icon((Icons.public, const Color(0xFF007AFF)),
-                            label: false),
-                        _icon((Icons.chat_bubble, const Color(0xFF30B0C7)),
-                            label: false),
-                        _icon((Icons.music_note, const Color(0xFFFF2D55)),
-                            label: false),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        // Voile sombre : met la fenêtre blanche en avant.
-        Container(color: Colors.black.withValues(alpha: 0.30)),
-      ],
     );
   }
 }
@@ -354,9 +199,32 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   late int _tab = widget.initialTab;
   late final int _captureSub = widget.initialSub;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Au retour au premier plan : recharge le store (le panneau système
+    // App Intents a pu écrire pendant que l'app était en arrière-plan)
+    // et rafraîchit l'Agenda depuis le Calendrier iPhone.
+    if (state == AppLifecycleState.resumed) {
+      store.load();
+      calendarSync.refresh();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -366,44 +234,7 @@ class _HomePageState extends State<HomePage> {
         return Scaffold(
           body: SafeArea(
             bottom: false,
-            child: Column(
-              children: [
-                // Retour vers la fenêtre rapide (écran racine).
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
-                    child: PressPop(
-                      child: GestureDetector(
-                        onTap: () => Navigator.of(context)
-                            .popUntil((r) => r.isFirst),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: _surfaceStrong,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.chevron_left,
-                                  size: 18, color: _textPrimary),
-                              Text('Fenêtre rapide',
-                                  style: GoogleFonts.montserrat(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: _textPrimary)),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                Expanded(child: _body()),
-              ],
-            ),
+            child: _body(),
           ),
           bottomNavigationBar: _navBar(),
         );
@@ -519,7 +350,7 @@ class _Empty extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 44, color: const Color(0xFFCCCCE0)),
+            Icon(icon, size: 44, color: _iconFaint),
             const SizedBox(height: 12),
             Text(title,
                 style: GoogleFonts.montserrat(
@@ -588,7 +419,7 @@ class NotesScreen extends StatelessWidget {
                                   color: _textPrimary)),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.delete_outline, size: 20),
+                          icon: const Icon(Icons.delete_outline, size: 24),
                           color: _textSecondary,
                           onPressed: () => store.deleteNote(n.id),
                         ),
@@ -603,7 +434,7 @@ class NotesScreen extends StatelessWidget {
                     const SizedBox(height: 6),
                     Text(formatStamp(n.createdAt),
                         style: GoogleFonts.montserrat(
-                            fontSize: 11, color: const Color(0xFFBBBBCC))),
+                            fontSize: 11, color: _textFaint)),
                   ],
                 ),
               );
@@ -658,7 +489,7 @@ class _TodosScreenState extends State<TodosScreen> {
           onTap: onTap,
           child: Container(
             margin: const EdgeInsets.all(3),
-            padding: const EdgeInsets.symmetric(vertical: 9),
+            padding: const EdgeInsets.symmetric(vertical: 12),
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: selected ? _textPrimary : Colors.transparent,
@@ -675,9 +506,9 @@ class _TodosScreenState extends State<TodosScreen> {
             ),
             child: Text(label,
                 style: GoogleFonts.montserrat(
-                    color: selected ? Colors.white : _textSecondary,
+                    color: selected ? _onPrimary : _textSecondary,
                     fontWeight: FontWeight.w600,
-                    fontSize: 13)),
+                    fontSize: 14)),
           ),
         ),
       );
@@ -745,9 +576,11 @@ class _TodosScreenState extends State<TodosScreen> {
       child: Row(
         children: [
           IconButton(
-            icon: Icon(t.done
-                ? Icons.check_circle
-                : Icons.radio_button_unchecked),
+            icon: Icon(
+                t.done
+                    ? Icons.check_circle
+                    : Icons.radio_button_unchecked,
+                size: 28),
             color: t.done ? Colors.green : _textSecondary,
             onPressed: () => store.toggleTodo(t.id),
           ),
@@ -765,7 +598,7 @@ class _TodosScreenState extends State<TodosScreen> {
                       decoration:
                           t.done ? TextDecoration.lineThrough : null,
                       color: t.done
-                          ? const Color(0xFFBBBBCC)
+                          ? _textFaint
                           : _textPrimary,
                     ),
                   ),
@@ -779,7 +612,7 @@ class _TodosScreenState extends State<TodosScreen> {
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.delete_outline, size: 20),
+            icon: const Icon(Icons.delete_outline, size: 24),
             color: _textSecondary,
             onPressed: () => store.deleteTodo(t.id),
           ),
@@ -816,7 +649,7 @@ class _TodosScreenState extends State<TodosScreen> {
                   Text('Créée : ${formatStamp(t.createdAt)}',
                       style: GoogleFonts.montserrat(
                           fontSize: 11,
-                          color: const Color(0xFFBBBBCC))),
+                          color: _textFaint)),
                   if (t.doneAt != null)
                     Text('Faite : ${formatStamp(t.doneAt!)}',
                         style: GoogleFonts.montserrat(
@@ -827,7 +660,7 @@ class _TodosScreenState extends State<TodosScreen> {
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.delete_outline, size: 20),
+            icon: const Icon(Icons.delete_outline, size: 24),
             color: _textSecondary,
             onPressed: () => store.deleteTodo(t.id),
           ),
@@ -860,9 +693,11 @@ class ReadingScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     IconButton(
-                      icon: Icon(it.done
-                          ? Icons.check_circle
-                          : Icons.radio_button_unchecked),
+                      icon: Icon(
+                          it.done
+                              ? Icons.check_circle
+                              : Icons.radio_button_unchecked,
+                          size: 28),
                       color: it.done ? Colors.green : _textSecondary,
                       onPressed: () => store.toggleReading(it.id),
                     ),
@@ -880,7 +715,7 @@ class ReadingScreen extends StatelessWidget {
                                   ? TextDecoration.lineThrough
                                   : null,
                               color: it.done
-                                  ? const Color(0xFFBBBBCC)
+                                  ? _textFaint
                                   : _textPrimary,
                             ),
                           ),
@@ -896,12 +731,12 @@ class ReadingScreen extends StatelessWidget {
                           Text('Ajouté : ${formatStamp(it.createdAt)}',
                               style: GoogleFonts.montserrat(
                                   fontSize: 11,
-                                  color: const Color(0xFFBBBBCC))),
+                                  color: _textFaint)),
                         ],
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.delete_outline, size: 20),
+                      icon: const Icon(Icons.delete_outline, size: 24),
                       color: _textSecondary,
                       onPressed: () {
                         Notifications.cancel(it.notificationId);
@@ -979,83 +814,357 @@ class _CaptureHubState extends State<CaptureHub>
 // Agenda
 // ============================================================
 
-class AgendaScreen extends StatelessWidget {
+class AgendaScreen extends StatefulWidget {
   const AgendaScreen({super.key});
+  @override
+  State<AgendaScreen> createState() => _AgendaScreenState();
+}
+
+class _AgendaScreenState extends State<AgendaScreen> {
+  @override
+  void initState() {
+    super.initState();
+    calendarSync.addListener(_onSync);
+    calendarSync.refresh();
+  }
+
+  @override
+  void dispose() {
+    calendarSync.removeListener(_onSync);
+    super.dispose();
+  }
+
+  void _onSync() {
+    if (mounted) setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
-    final events = store.events;
+    final linked = calendarSync.linked;
+    // Une fois connecté, le Calendrier iPhone est la source de vérité ;
+    // sinon l'Agenda reste local (web de développement, accès refusé…).
+    final events = linked ? calendarSync.events : store.events;
     return _Page(
       title: 'Agenda',
       trailing: PressPop(
         child: IconButton(
-          icon: const Icon(Icons.add, color: _textPrimary),
+          icon: Icon(Icons.add, color: _textPrimary, size: 30),
           onPressed: () => _add(context),
         ),
       ),
-      child: events.isEmpty
-          ? const _Empty(Icons.event, 'Aucun événement',
-              'Touche « + » pour ajouter un événement à ton agenda.')
-          : ListView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
-              itemCount: events.length,
-              itemBuilder: (context, i) {
-                final ev = events[i];
-                final hm =
-                    '${ev.when.hour.toString().padLeft(2, '0')}:${ev.when.minute.toString().padLeft(2, '0')}';
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.all(12),
-                  decoration: _card,
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 52,
-                        padding: const EdgeInsets.symmetric(vertical: 6),
-                        decoration: BoxDecoration(
-                            color: _surfaceStrong,
-                            borderRadius: BorderRadius.circular(12)),
-                        child: Column(
-                          children: [
-                            Text('${ev.when.day}',
-                                style: GoogleFonts.montserrat(
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.w700,
-                                    color: _textPrimary)),
-                            Text(_monthShort(ev.when.month),
-                                style: GoogleFonts.montserrat(
-                                    fontSize: 11,
-                                    color: _textSecondary)),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(ev.title,
-                                style: GoogleFonts.montserrat(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
-                                    color: _textPrimary)),
-                            Text(
-                                '🕒 $hm${ev.note.isNotEmpty ? ' · ${ev.note}' : ''}',
-                                style: GoogleFonts.montserrat(
-                                    fontSize: 12, color: _textSecondary)),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline, size: 20),
-                        color: _textSecondary,
-                        onPressed: () => store.deleteEvent(ev.id),
-                      ),
-                    ],
+      child: Column(
+        children: [
+          if (!calendarSync.available) _webInfoCard(),
+          if (calendarSync.available && !linked) _linkCard(),
+          if (linked) _syncedBadge(),
+          Expanded(
+            child: events.isEmpty
+                ? const _Empty(Icons.event, 'Aucun événement',
+                    'Touche « + » pour ajouter un événement à ton agenda.')
+                : ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+                    itemCount: events.length,
+                    itemBuilder: (context, i) => _eventTile(events[i]),
                   ),
-                );
-              },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _eventTile(CalEvent ev) {
+    final hm =
+        '${ev.when.hour.toString().padLeft(2, '0')}:${ev.when.minute.toString().padLeft(2, '0')}';
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: _card,
+      child: Row(
+        children: [
+          Container(
+            width: 52,
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            decoration: BoxDecoration(
+                color: _surfaceStrong,
+                borderRadius: BorderRadius.circular(12)),
+            child: Column(
+              children: [
+                Text('${ev.when.day}',
+                    style: GoogleFonts.montserrat(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        color: _textPrimary)),
+                Text(_monthShort(ev.when.month),
+                    style: GoogleFonts.montserrat(
+                        fontSize: 11,
+                        color: _textSecondary)),
+              ],
             ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              // Toucher l'événement = le modifier (répercuté dans le
+              // Calendrier iPhone quand l'Agenda est connecté).
+              onTap: ev.editable ? () => _edit(ev) : null,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(ev.title,
+                      style: GoogleFonts.montserrat(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: _textPrimary)),
+                  Text(
+                      '🕒 $hm${ev.note.isNotEmpty ? ' · ${ev.note}' : ''}',
+                      style: GoogleFonts.montserrat(
+                          fontSize: 12, color: _textSecondary)),
+                  if (ev.calendarName.isNotEmpty)
+                    Text('📅 ${ev.calendarName}',
+                        style: GoogleFonts.montserrat(
+                            fontSize: 11, color: _textFaint)),
+                ],
+              ),
+            ),
+          ),
+          if (ev.editable)
+            IconButton(
+              icon: const Icon(Icons.delete_outline, size: 24),
+              color: _textSecondary,
+              onPressed: () => _delete(ev),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Sur le web de développement : la synchro n'existe que sur iPhone.
+  Widget _webInfoCard() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      padding: const EdgeInsets.all(14),
+      decoration: _card,
+      child: Row(
+        children: [
+          Icon(Icons.phone_iphone, color: _textSecondary, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Sur iPhone, l\'Agenda se connecte au vrai Calendrier (autorisation d\'afficher, ajouter, modifier et supprimer). Ici sur le web, il fonctionne en local.',
+              style: GoogleFonts.montserrat(
+                  fontSize: 12, color: _textSecondary, height: 1.5),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Carte d'invitation à connecter l'Agenda au Calendrier iPhone.
+  Widget _linkCard() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      padding: const EdgeInsets.all(16),
+      decoration: _card,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.sync, color: _textPrimary, size: 22),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text('Synchroniser avec le Calendrier',
+                    style: GoogleFonts.montserrat(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: _textPrimary)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Connecte ton Agenda au Calendrier de l\'iPhone : chaque ajout ou suppression est répercuté des deux côtés, en permanence.',
+            style: GoogleFonts.montserrat(
+                fontSize: 13, color: _textSecondary, height: 1.5),
+          ),
+          const SizedBox(height: 12),
+          PressPop(
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _textPrimary,
+                foregroundColor: _onPrimary,
+                elevation: 0,
+                minimumSize: const Size.fromHeight(54),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
+              ),
+              icon: const Icon(Icons.event_available, size: 22),
+              label: Text(
+                  calendarSync.busy ? 'Connexion…' : 'Connecter mon Agenda',
+                  style: GoogleFonts.montserrat(
+                      fontWeight: FontWeight.w700, fontSize: 15)),
+              onPressed: calendarSync.busy ? null : _link,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Bandeau « connecté » + choix du calendrier de destination
+  /// (iCloud, Google, Outlook… selon les comptes de l'iPhone).
+  Widget _syncedBadge() {
+    final target = calendarSync.targetCalendarName.isEmpty
+        ? 'Calendrier par défaut'
+        : calendarSync.targetCalendarName;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+      child: Row(
+        children: [
+          const Icon(Icons.check_circle, size: 16, color: Colors.green),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text('Synchronisé · ajouts dans : $target',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.montserrat(
+                    fontSize: 12, color: _textSecondary)),
+          ),
+          PressPop(
+            child: GestureDetector(
+              onTap: _pickCalendar,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                decoration: BoxDecoration(
+                  color: _surfaceStrong,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text('Changer',
+                    style: GoogleFonts.montserrat(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: _textPrimary)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Feuille de choix du calendrier de destination des nouveaux événements.
+  Future<void> _pickCalendar() async {
+    final cals = await calendarSync.calendars();
+    if (!mounted) return;
+    _showSheet(context, 'Créer mes événements dans…', (setSheet) {
+      Widget option(
+          {required String title,
+          required String subtitle,
+          required bool selected,
+          required VoidCallback onTap}) {
+        return PressPop(
+          child: GestureDetector(
+            onTap: onTap,
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+              decoration: BoxDecoration(
+                color: selected ? _textPrimary : _surfaceStrong,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                      selected
+                          ? Icons.radio_button_checked
+                          : Icons.radio_button_unchecked,
+                      size: 22,
+                      color: selected ? _onPrimary : _textSecondary),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(title,
+                            style: GoogleFonts.montserrat(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color:
+                                    selected ? _onPrimary : _textPrimary)),
+                        if (subtitle.isNotEmpty)
+                          Text(subtitle,
+                              style: GoogleFonts.montserrat(
+                                  fontSize: 11,
+                                  color: selected
+                                      ? _onPrimary.withValues(alpha: 0.7)
+                                      : _textSecondary)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }
+
+      return [
+        Text(
+          'Tes événements restent visibles tous calendriers confondus ; ce choix fixe où sont créés les nouveaux (iCloud, Google, Outlook…).',
+          style: GoogleFonts.montserrat(
+              fontSize: 12, color: _textSecondary, height: 1.5),
+        ),
+        const SizedBox(height: 12),
+        option(
+          title: 'Calendrier par défaut de l\'iPhone',
+          subtitle: '',
+          selected: calendarSync.targetCalendarId == null,
+          onTap: () {
+            calendarSync.setTarget(null);
+            Navigator.of(context).pop();
+          },
+        ),
+        ...cals.map((c) => option(
+              title: c.title,
+              subtitle: c.source,
+              selected: calendarSync.targetCalendarId == c.id,
+              onTap: () {
+                calendarSync.setTarget(c);
+                Navigator.of(context).pop();
+              },
+            )),
+      ];
+    });
+  }
+
+  Future<void> _link() async {
+    final ok = await calendarSync.link();
+    if (!mounted || ok) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+            'Accès refusé. Autorise le Calendrier dans Réglages iOS → Confidentialité → Calendriers → Shortist (Accès complet).',
+            style: GoogleFonts.montserrat()),
+      ),
+    );
+  }
+
+  Future<void> _delete(CalEvent ev) async {
+    if (calendarSync.linked && ev.deviceId != null) {
+      final ok = await calendarSync.delete(ev);
+      if (!ok && mounted) _syncError('Suppression impossible dans le Calendrier.');
+    } else {
+      store.deleteEvent(ev.id);
+    }
+  }
+
+  void _syncError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message, style: GoogleFonts.montserrat())),
     );
   }
 
@@ -1074,15 +1183,63 @@ class AgendaScreen extends StatelessWidget {
           onPick: (d) => setSheet(() => when = d),
         ),
         const SizedBox(height: 14),
-        _sheetPrimary('Ajouter à l\'agenda', () {
+        _sheetPrimary('Ajouter à l\'agenda', () async {
           if (title.text.trim().isEmpty) return;
-          store.addEvent(CalEvent(
-            id: _uid(),
-            title: title.text.trim(),
-            when: when,
-            note: note.text.trim(),
-          ));
           Navigator.of(context).pop();
+          if (calendarSync.linked) {
+            // Créé directement dans le Calendrier iPhone.
+            final ok = await calendarSync.add(
+                title: title.text.trim(),
+                when: when,
+                note: note.text.trim());
+            if (!ok && mounted) {
+              _syncError('Ajout impossible dans le Calendrier.');
+            }
+          } else {
+            store.addEvent(CalEvent(
+              id: _uid(),
+              title: title.text.trim(),
+              when: when,
+              note: note.text.trim(),
+            ));
+          }
+        }),
+      ];
+    });
+  }
+
+  /// Modification d'un événement — répercutée dans le Calendrier iPhone
+  /// quand l'Agenda est connecté.
+  void _edit(CalEvent ev) {
+    final title = TextEditingController(text: ev.title);
+    final note = TextEditingController(text: ev.note);
+    DateTime when = ev.when;
+    _showSheet(context, 'Modifier l\'événement', (setSheet) {
+      return [
+        _sheetField(title, 'Titre de l\'événement…'),
+        const SizedBox(height: 8),
+        _sheetField(note, 'Lieu / note (optionnel)…'),
+        const SizedBox(height: 8),
+        _DateTimeRow(
+          when: when,
+          onPick: (d) => setSheet(() => when = d),
+        ),
+        const SizedBox(height: 14),
+        _sheetPrimary('Enregistrer', () async {
+          if (title.text.trim().isEmpty) return;
+          Navigator.of(context).pop();
+          if (calendarSync.linked && ev.deviceId != null) {
+            final ok = await calendarSync.update(ev,
+                title: title.text.trim(),
+                when: when,
+                note: note.text.trim());
+            if (!ok && mounted) {
+              _syncError('Modification impossible dans le Calendrier.');
+            }
+          } else {
+            store.updateEvent(ev.id,
+                title: title.text.trim(), when: when, note: note.text.trim());
+          }
         }),
       ];
     });
@@ -1103,7 +1260,7 @@ class CarnetScreen extends StatelessWidget {
       title: 'Carnet',
       trailing: PressPop(
         child: IconButton(
-          icon: const Icon(Icons.add, color: _textPrimary),
+          icon: Icon(Icons.add, color: _textPrimary, size: 30),
           onPressed: () => _add(context),
         ),
       ),
@@ -1132,7 +1289,7 @@ class CarnetScreen extends StatelessWidget {
                                     color: _textPrimary)),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.delete_outline, size: 20),
+                            icon: const Icon(Icons.delete_outline, size: 24),
                             color: _textSecondary,
                             onPressed: () => store.deleteCarnet(f.id),
                           ),
@@ -1150,7 +1307,7 @@ class CarnetScreen extends StatelessWidget {
                           child: Text('🕒 ${formatStamp(f.when!)}',
                               style: GoogleFonts.montserrat(
                                   fontSize: 11,
-                                  color: const Color(0xFFBBBBCC))),
+                                  color: _textFaint)),
                         ),
                       if (f.imageB64 != null)
                         Padding(
@@ -1194,12 +1351,12 @@ class CarnetScreen extends StatelessWidget {
           child: OutlinedButton.icon(
             style: OutlinedButton.styleFrom(
               foregroundColor: _textPrimary,
-              side: const BorderSide(color: _border),
-              minimumSize: const Size.fromHeight(48),
+              side: BorderSide(color: _border),
+              minimumSize: const Size.fromHeight(54),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14)),
             ),
-            icon: const Icon(Icons.image_outlined),
+            icon: const Icon(Icons.image_outlined, size: 22),
             label: Text(
                 imageB64 == null ? 'Ajouter une image' : 'Image ajoutée ✓',
                 style: GoogleFonts.montserrat(fontWeight: FontWeight.w600)),
@@ -1332,8 +1489,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               decoration: BoxDecoration(
                                   color: _textPrimary,
                                   shape: BoxShape.circle),
-                              child: const Icon(Icons.edit,
-                                  size: 15, color: Colors.white),
+                              child: Icon(Icons.edit,
+                                  size: 15, color: _onPrimary),
                             ),
                           ),
                         ],
@@ -1351,9 +1508,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _textPrimary,
-                      foregroundColor: Colors.white,
+                      foregroundColor: _onPrimary,
                       elevation: 0,
-                      minimumSize: const Size.fromHeight(50),
+                      minimumSize: const Size.fromHeight(56),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16)),
                     ),
@@ -1365,14 +1522,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text('Profil enregistré ✓',
-                              style: GoogleFonts.montserrat()),
+                              style:
+                                  GoogleFonts.montserrat(color: _onPrimary)),
                           backgroundColor: _textPrimary,
                         ),
                       );
                     },
                     child: Text('Enregistrer',
                         style: GoogleFonts.montserrat(
-                            fontWeight: FontWeight.w700)),
+                            fontWeight: FontWeight.w700, fontSize: 15)),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -1385,10 +1543,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 18),
-          // Tap Back
+          // Apparence : bascule clair / sombre (transition animée).
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
-            child: Text('Tap Back',
+            child: Text('Apparence',
                 style: GoogleFonts.montserrat(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
@@ -1396,137 +1554,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     letterSpacing: 0.5)),
           ),
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: _card,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    const Icon(Icons.touch_app_outlined,
-                        color: _textPrimary, size: 20),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Fenêtre de commande rapide',
-                        style: GoogleFonts.montserrat(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: _textPrimary),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Ouvre la mini-fenêtre Shortist comme si tu tapotais l\'arrière de ton iPhone.',
-                  style: GoogleFonts.montserrat(
-                      fontSize: 13, color: _textSecondary, height: 1.5),
-                ),
-                const SizedBox(height: 14),
-                PressPop(
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _textPrimary,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      minimumSize: const Size.fromHeight(50),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16)),
-                    ),
-                    icon: const Icon(Icons.smart_button_outlined, size: 20),
-                    label: Text('Tester Tap Back',
-                        style: GoogleFonts.montserrat(
-                            fontWeight: FontWeight.w700)),
-                    onPressed: () => tapBackTrigger.value++,
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 250),
+                  transitionBuilder: (child, anim) => RotationTransition(
+                    turns: Tween(begin: 0.75, end: 1.0).animate(anim),
+                    child: FadeTransition(opacity: anim, child: child),
                   ),
+                  child: Icon(
+                    store.darkMode ? Icons.dark_mode : Icons.light_mode,
+                    key: ValueKey(store.darkMode),
+                    color: _textPrimary,
+                    size: 26,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text('Mode sombre',
+                      style: GoogleFonts.montserrat(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: _textPrimary)),
+                ),
+                Switch.adaptive(
+                  value: store.darkMode,
+                  onChanged: (v) => store.setDarkMode(v),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 10),
-          // Fond affiché derrière la fenêtre rapide
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: _card,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.wallpaper_outlined,
-                        color: _textPrimary, size: 20),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Fond derrière la fenêtre',
-                        style: GoogleFonts.montserrat(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: _textPrimary),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'iOS ne permet pas d\'afficher le vrai écran d\'accueil derrière une app. '
-                  'Astuce : fais une capture d\'écran de TON écran d\'accueil, puis choisis-la ici. '
-                  'Le rendu sera identique à ton iPhone.',
-                  style: GoogleFonts.montserrat(
-                      fontSize: 13, color: _textSecondary, height: 1.5),
-                ),
-                const SizedBox(height: 14),
-                PressPop(
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: _textPrimary,
-                      side: const BorderSide(color: _border),
-                      minimumSize: const Size.fromHeight(50),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16)),
-                    ),
-                    icon: const Icon(Icons.add_photo_alternate_outlined,
-                        size: 20),
-                    label: Text(
-                        store.panelWallpaperB64 == null
-                            ? 'Choisir ma capture d\'écran'
-                            : 'Capture définie ✓ — changer',
-                        style: GoogleFonts.montserrat(
-                            fontWeight: FontWeight.w600)),
-                    onPressed: () async {
-                      final picked = await ImagePicker().pickImage(
-                          source: ImageSource.gallery,
-                          maxWidth: 1500,
-                          imageQuality: 85);
-                      if (picked == null) return;
-                      final bytes = await picked.readAsBytes();
-                      await store.savePanelWallpaper(base64Encode(bytes));
-                      if (mounted) setState(() {});
-                    },
-                  ),
-                ),
-                if (store.panelWallpaperB64 != null) ...[
-                  const SizedBox(height: 8),
-                  PressPop(
-                    child: TextButton(
-                      style: TextButton.styleFrom(
-                        foregroundColor: _textSecondary,
-                        minimumSize: const Size.fromHeight(40),
-                      ),
-                      onPressed: () async {
-                        await store.savePanelWallpaper(null);
-                        if (mounted) setState(() {});
-                      },
-                      child: Text('Retirer la capture',
-                          style: GoogleFonts.montserrat(
-                              fontSize: 13, fontWeight: FontWeight.w500)),
-                    ),
-                  ),
-                ],
-              ],
-            ),
+          const SizedBox(height: 18),
+          // Mettre en place : guide illustré (images dans assets/setup/).
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+            child: Text('Mettre en place',
+                style: GoogleFonts.montserrat(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: _textSecondary,
+                    letterSpacing: 0.5)),
           ),
+          const _SetupGuideCard(),
           const SizedBox(height: 18),
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
@@ -1675,16 +1746,16 @@ Widget _sheetPrimary(String label, VoidCallback onTap) {
     child: ElevatedButton(
       style: ElevatedButton.styleFrom(
         backgroundColor: _textPrimary,
-        foregroundColor: Colors.white,
+        foregroundColor: _onPrimary,
         elevation: 0,
-        minimumSize: const Size.fromHeight(52),
+        minimumSize: const Size.fromHeight(58),
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
       onPressed: onTap,
       child: Text(label,
           style:
-              GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 15)),
+              GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 16)),
     ),
   );
 }
@@ -1708,19 +1779,22 @@ class _DateTimeRow extends StatelessWidget {
       child: OutlinedButton.icon(
         style: OutlinedButton.styleFrom(
           foregroundColor: _textPrimary,
-          side: const BorderSide(color: _border),
-          minimumSize: const Size.fromHeight(48),
+          side: BorderSide(color: _border),
+          minimumSize: const Size.fromHeight(54),
           alignment: Alignment.centerLeft,
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(14)),
         ),
-        icon: const Icon(Icons.schedule),
+        icon: const Icon(Icons.schedule, size: 22),
         label: Text(label,
-            style: GoogleFonts.montserrat(fontWeight: FontWeight.w500)),
+            style: GoogleFonts.montserrat(
+                fontWeight: FontWeight.w500, fontSize: 15)),
         onPressed: () async {
           final now = DateTime.now();
           final d = await showDatePicker(
             context: context,
+            // Sélecteur en français (jours, mois, format JJ/MM/AAAA).
+            locale: const Locale('fr'),
             initialDate: when ?? now,
             firstDate: now.subtract(const Duration(days: 1)),
             lastDate: now.add(const Duration(days: 365 * 3)),
@@ -1734,633 +1808,6 @@ class _DateTimeRow extends StatelessWidget {
           onPick(DateTime(d.year, d.month, d.day, t.hour, t.minute));
         },
       ),
-    );
-  }
-}
-
-// ============================================================
-// Fenêtre de commande (Tap Back)
-// ============================================================
-
-enum _Mode { choices, note, todo, reading }
-
-class CommandPanel extends StatefulWidget {
-  const CommandPanel({super.key});
-  @override
-  State<CommandPanel> createState() => _CommandPanelState();
-}
-
-class _CommandPanelState extends State<CommandPanel> {
-  _Mode _mode = _Mode.choices;
-
-  final _noteTitle = TextEditingController();
-  final _noteBody = TextEditingController();
-  final _todoText = TextEditingController();
-  final _todoDesc = TextEditingController();
-  final List<TextEditingController> _readControllers = [
-    TextEditingController()
-  ];
-  String _remindKey = '';
-  DateTime? _customDateTime;
-
-  // Rafraîchit la liste des tâches chaque minute pour faire disparaître
-  // celles cochées depuis plus de 10 min.
-  Timer? _ticker;
-
-  @override
-  void initState() {
-    super.initState();
-    _ticker = Timer.periodic(const Duration(minutes: 1), (_) {
-      if (mounted) setState(() {});
-    });
-  }
-
-  static const _remindOptions = [
-    ('1h', 'Dans 1 h'),
-    ('eve', 'Ce soir 20h'),
-    ('tom', 'Demain 9h'),
-    ('3d', 'Dans 3 j'),
-  ];
-
-  String _two(int n) => n.toString().padLeft(2, '0');
-
-  @override
-  void dispose() {
-    _ticker?.cancel();
-    _noteTitle.dispose();
-    _noteBody.dispose();
-    _todoText.dispose();
-    _todoDesc.dispose();
-    for (final c in _readControllers) {
-      c.dispose();
-    }
-    super.dispose();
-  }
-
-  /// Ferme la fenêtre rapide : l'app retourne en arrière-plan
-  /// (écran d'accueil de l'iPhone) et le panneau revient au menu.
-  void _close() {
-    FocusScope.of(context).unfocus();
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
-      minimizeApp();
-    }
-    setState(() {
-      _mode = _Mode.choices;
-      _noteTitle.clear();
-      _noteBody.clear();
-      _todoText.clear();
-      _todoDesc.clear();
-    });
-  }
-
-  /// Seule porte d'entrée vers l'accueil complet de l'app.
-  void _openApp({int tab = 0, int sub = 0}) {
-    FocusScope.of(context).unfocus();
-    setState(() => _mode = _Mode.choices);
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => HomePage(initialTab: tab, initialSub: sub),
-    ));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // Le panneau est collé au bord supérieur PHYSIQUE de l'écran : son fond
-    // blanc passe sous l'encoche / la Dynamic Island, et seul le contenu
-    // respecte la safe area. Coins arrondis en bas uniquement → la fenêtre
-    // semble sortir de l'encoche de l'iPhone.
-    final topInset = MediaQuery.paddingOf(context).top;
-    return Align(
-      alignment: Alignment.topCenter,
-      child: SingleChildScrollView(
-        // Entrée en glissant depuis le haut, avec un léger rebond
-        // (le panneau est recréé à chaque tap-back via sa clé,
-        // donc l'animation rejoue).
-        child: TweenAnimationBuilder<double>(
-          tween: Tween(begin: 0, end: 1),
-          duration: const Duration(milliseconds: 520),
-          curve: Curves.easeOutBack,
-          builder: (context, v, child) => Transform.translate(
-            offset: Offset(0, (1 - v) * -460),
-            child: child,
-          ),
-          child: Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: const BorderRadius.vertical(
-                  bottom: Radius.circular(30)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.30),
-                  blurRadius: 36,
-                  offset: const Offset(0, 14),
-                ),
-              ],
-            ),
-            child: Material(
-              color: Colors.transparent,
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(14, topInset + 6, 14, 10),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    AnimatedSize(
-                      duration: const Duration(milliseconds: 280),
-                      curve: Curves.easeOutCubic,
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 220),
-                        child: _buildMode(),
-                      ),
-                    ),
-                    // Petite poignée décorative en bas du panneau.
-                    Padding(
-                      padding: const EdgeInsets.only(top: 10),
-                      child: Container(
-                        width: 38,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMode() {
-    switch (_mode) {
-      case _Mode.choices:
-        return _choices();
-      case _Mode.note:
-        return _notePanel();
-      case _Mode.todo:
-        return _todoPanel();
-      case _Mode.reading:
-        return _readingPanel();
-    }
-  }
-
-  Widget _choices() {
-    return Column(
-      key: const ValueKey('choices'),
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: Row(
-            children: [
-              const SizedBox(width: 34),
-              Expanded(
-                child: Center(
-                  child: Text('Shortist',
-                      style: GoogleFonts.montserrat(
-                          color: Colors.black,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.2)),
-                ),
-              ),
-              InkWell(
-                onTap: _close,
-                borderRadius: BorderRadius.circular(11),
-                child: Container(
-                  width: 34,
-                  height: 34,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF0F0F3),
-                    borderRadius: BorderRadius.circular(11),
-                  ),
-                  child: const Icon(Icons.close, size: 18, color: Colors.black),
-                ),
-              ),
-            ],
-          ),
-        ),
-        Row(
-          children: [
-            _cmd(Icons.edit_note, 'Note',
-                () => setState(() => _mode = _Mode.note)),
-            const SizedBox(width: 8),
-            _cmd(Icons.add_task, 'To-Do',
-                () => setState(() => _mode = _Mode.todo)),
-            const SizedBox(width: 8),
-            _cmd(Icons.bookmark_add_outlined, 'À lire',
-                () => setState(() => _mode = _Mode.reading)),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: _cmdWide(Icons.menu_book, 'Voir les notes',
-                  () => _openApp(sub: 0)),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _cmdWide(Icons.checklist, 'Voir To-Do',
-                  () => _openApp(sub: 1)),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        // Seul accès vers l'accueil complet de l'application.
-        _PanelButton(
-          onTap: () => _openApp(),
-          filledDark: true,
-          padding: const EdgeInsets.symmetric(vertical: 13),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text('Ouvrir l\'application',
-                  style: GoogleFonts.montserrat(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14)),
-              const SizedBox(width: 8),
-              const Icon(Icons.arrow_forward, size: 18, color: Colors.white),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _cmd(IconData icon, String label, VoidCallback onTap) {
-    return Expanded(
-      child: _PanelButton(
-        onTap: onTap,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 23, color: Colors.black),
-            const SizedBox(height: 4),
-            Text(label,
-                style: GoogleFonts.montserrat(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _cmdWide(IconData icon, String label, VoidCallback onTap) {
-    return _PanelButton(
-      onTap: onTap,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 20, color: Colors.black),
-          const SizedBox(width: 8),
-          Text(label,
-              style: GoogleFonts.montserrat(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black)),
-        ],
-      ),
-    );
-  }
-
-  Widget _head(String title) {
-    return Row(
-      children: [
-        InkWell(
-          onTap: () => setState(() => _mode = _Mode.choices),
-          borderRadius: BorderRadius.circular(11),
-          child: Container(
-            width: 34,
-            height: 34,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: const Color(0xFFF0F0F3),
-              borderRadius: BorderRadius.circular(11),
-            ),
-            child: const Icon(Icons.chevron_left, color: Colors.black),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Text(title,
-            style: GoogleFonts.montserrat(
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-                color: Colors.black)),
-      ],
-    );
-  }
-
-  Widget _notePanel() {
-    return Column(
-      key: const ValueKey('note'),
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _head('Note'),
-        const SizedBox(height: 10),
-        _field(_noteTitle, 'Titre…', autofocus: true),
-        const SizedBox(height: 8),
-        _field(_noteBody, 'Écris ta note…', maxLines: 4),
-        const SizedBox(height: 10),
-        _primary('Enregistrer', () {
-          final title = _noteTitle.text.trim();
-          final body = _noteBody.text.trim();
-          if (title.isEmpty && body.isEmpty) return;
-          store.addNote(Note(
-            id: _uid(),
-            createdAt: DateTime.now(),
-            title: title.isEmpty ? 'Note' : title,
-            body: body,
-          ));
-          _close();
-        }),
-      ],
-    );
-  }
-
-  Widget _todoPanel() {
-    return ListenableBuilder(
-      key: const ValueKey('todo'),
-      listenable: store,
-      builder: (context, _) {
-        final recent = store.quickPanelTodos;
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _head('To-Do'),
-            const SizedBox(height: 10),
-            _field(_todoText, 'Nouvelle tâche…', autofocus: true),
-            const SizedBox(height: 8),
-            _field(_todoDesc, 'Description (optionnel)…'),
-            const SizedBox(height: 10),
-            _primary('Ajouter', () {
-              final text = _todoText.text.trim();
-              if (text.isEmpty) return;
-              store.addTodo(Todo(
-                id: _uid(),
-                createdAt: DateTime.now(),
-                text: text,
-                description: _todoDesc.text.trim(),
-              ));
-              _todoText.clear();
-              _todoDesc.clear();
-            }),
-            if (recent.isNotEmpty) ...[
-              const SizedBox(height: 14),
-              Text('Dernières tâches',
-                  style: GoogleFonts.montserrat(
-                      fontWeight: FontWeight.w700,
-                      color: Colors.black,
-                      fontSize: 13)),
-              const SizedBox(height: 6),
-              ...recent.map(_quickTodoTile),
-            ],
-          ],
-        );
-      },
-    );
-  }
-
-  /// Tâche dans la fenêtre rapide : coche pour marquer « fait ».
-  /// Une tâche cochée disparaît d'ici au bout de 10 min, mais reste
-  /// dans l'historique de l'accueil de l'app.
-  Widget _quickTodoTile(Todo t) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 2),
-      child: Row(
-        children: [
-          IconButton(
-            visualDensity: VisualDensity.compact,
-            icon: Icon(
-                t.done ? Icons.check_circle : Icons.radio_button_unchecked,
-                size: 22),
-            color: t.done ? Colors.green : Colors.black38,
-            onPressed: () => store.toggleTodo(t.id),
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  t.text,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.montserrat(
-                    fontSize: 14,
-                    decoration: t.done ? TextDecoration.lineThrough : null,
-                    color: t.done ? Colors.black38 : Colors.black,
-                  ),
-                ),
-                if (t.done)
-                  Text('Fait ✓ — disparaîtra d\'ici 10 min',
-                      style: GoogleFonts.montserrat(
-                          fontSize: 10, color: Colors.black38)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _readingPanel() {
-    return Column(
-      key: const ValueKey('reading'),
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _head('À lire plus tard'),
-        const SizedBox(height: 8),
-        Text(
-          'Garde un lien ou un texte à lire plus tard. Programme un rappel.',
-          style: GoogleFonts.montserrat(
-              color: Colors.black54, fontSize: 13, height: 1.4),
-        ),
-        const SizedBox(height: 10),
-        for (int i = 0; i < _readControllers.length; i++) ...[
-          _field(_readControllers[i],
-              i == 0 ? 'Lien ou texte à lire…' : 'Autre élément…',
-              autofocus: i == 0),
-          const SizedBox(height: 8),
-        ],
-        Align(
-          alignment: Alignment.centerLeft,
-          child: _chip('＋ Ajouter',
-              () => setState(
-                  () => _readControllers.add(TextEditingController()))),
-        ),
-        const SizedBox(height: 14),
-        Text('⏰ Me le rappeler',
-            style: GoogleFonts.montserrat(
-                fontWeight: FontWeight.w700,
-                color: Colors.black,
-                fontSize: 14)),
-        const SizedBox(height: 8),
-        Wrap(spacing: 7, runSpacing: 7, children: _remindChips()),
-        const SizedBox(height: 14),
-        _primary('Enregistrer', _saveReading),
-      ],
-    );
-  }
-
-  List<Widget> _remindChips() {
-    Widget chip(String key, String label, VoidCallback onTap) {
-      final on = _remindKey == key;
-      return GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: on ? const Color(0xFF1C1C2E) : Colors.white,
-            border: Border.all(
-                color: on ? const Color(0xFF1C1C2E) : Colors.black12),
-            borderRadius: BorderRadius.circular(11),
-          ),
-          child: Text(label,
-              style: GoogleFonts.montserrat(
-                  color: on ? Colors.white : Colors.black,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13)),
-        ),
-      );
-    }
-
-    final widgets = _remindOptions
-        .map((o) =>
-            chip(o.$1, o.$2, () => setState(() => _remindKey = o.$1)))
-        .toList();
-    final customLabel = _customDateTime == null
-        ? '🗓️ Personnaliser'
-        : '🗓️ ${_customDateTime!.day}/${_customDateTime!.month} à ${_two(_customDateTime!.hour)}:${_two(_customDateTime!.minute)}';
-    widgets.add(chip('custom', customLabel, _pickCustom));
-    return widgets;
-  }
-
-  Future<void> _pickCustom() async {
-    final now = DateTime.now();
-    final date = await showDatePicker(
-      context: context,
-      initialDate: now,
-      firstDate: now,
-      lastDate: now.add(const Duration(days: 365)),
-    );
-    if (date == null || !mounted) return;
-    final time = await showTimePicker(
-      context: context,
-      initialTime:
-          TimeOfDay.fromDateTime(now.add(const Duration(hours: 1))),
-    );
-    if (time == null || !mounted) return;
-    setState(() {
-      _customDateTime = DateTime(
-          date.year, date.month, date.day, time.hour, time.minute);
-      _remindKey = 'custom';
-    });
-  }
-
-  DateTime? _remindDateTime(String key) {
-    final now = DateTime.now();
-    switch (key) {
-      case '1h':
-        return now.add(const Duration(hours: 1));
-      case 'eve':
-        var d = DateTime(now.year, now.month, now.day, 20);
-        if (!d.isAfter(now)) d = d.add(const Duration(days: 1));
-        return d;
-      case 'tom':
-        final t = now.add(const Duration(days: 1));
-        return DateTime(t.year, t.month, t.day, 9);
-      case '3d':
-        final t = now.add(const Duration(days: 3));
-        return DateTime(t.year, t.month, t.day, 9);
-      case 'custom':
-        return _customDateTime;
-      default:
-        return null;
-    }
-  }
-
-  void _saveReading() {
-    final texts = _readControllers
-        .map((c) => c.text.trim())
-        .where((t) => t.isNotEmpty)
-        .toList();
-    if (texts.isEmpty) return;
-    final remindAt = _remindDateTime(_remindKey);
-    if (remindAt != null) Notifications.requestPermission();
-    for (final text in texts) {
-      final item = ReadItem(
-          id: _uid(),
-          createdAt: DateTime.now(),
-          text: text,
-          remindAt: remindAt);
-      store.addReading(item);
-      if (remindAt != null) {
-        Notifications.schedule(
-            id: item.notificationId, body: text, when: remindAt);
-      }
-    }
-    _close();
-  }
-
-  Widget _chip(String label, VoidCallback onTap) {
-    return _PanelButton(
-      onTap: onTap,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-      child: Text(label,
-          style: GoogleFonts.montserrat(
-              color: Colors.black,
-              fontWeight: FontWeight.w600,
-              fontSize: 13)),
-    );
-  }
-
-  Widget _field(TextEditingController c, String hint,
-      {bool autofocus = false, int maxLines = 1, VoidCallback? onSubmit}) {
-    return TextField(
-      controller: c,
-      autofocus: autofocus,
-      maxLines: maxLines,
-      style:
-          GoogleFonts.montserrat(color: Colors.black, fontSize: 16),
-      textInputAction:
-          maxLines > 1 ? TextInputAction.newline : TextInputAction.done,
-      onSubmitted: onSubmit == null ? null : (_) => onSubmit(),
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: GoogleFonts.montserrat(color: Colors.black38),
-        filled: true,
-        fillColor: const Color(0xFFF1F1F4),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide.none,
-        ),
-      ),
-    );
-  }
-
-  Widget _primary(String label, VoidCallback onTap) {
-    return _PanelButton(
-      onTap: onTap,
-      filledDark: true,
-      padding: const EdgeInsets.symmetric(vertical: 15),
-      child: Text(label,
-          textAlign: TextAlign.center,
-          style: GoogleFonts.montserrat(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-              fontSize: 16)),
     );
   }
 }
@@ -2396,57 +1843,132 @@ class _PressPopState extends State<PressPop> {
   }
 }
 
-/// Bouton utilisé dans le CommandPanel (fond blanc ou sombre).
-class _PanelButton extends StatefulWidget {
-  final Widget child;
-  final VoidCallback onTap;
-  final bool filledDark;
-  final EdgeInsets padding;
-  const _PanelButton({
-    required this.child,
-    required this.onTap,
-    this.filledDark = false,
-    this.padding =
-        const EdgeInsets.symmetric(vertical: 11, horizontal: 4),
-  });
+// ============================================================
+// Guide « Mettre en place » (Réglages)
+// ============================================================
+
+/// Carrousel d'images du guide d'installation. Dépose tes captures dans
+/// `assets/setup/` (etape_1.png, etape_2.png, …) : elles s'affichent ici
+/// dans l'ordre alphabétique des noms de fichiers — rien d'autre à coder.
+class _SetupGuideCard extends StatefulWidget {
+  const _SetupGuideCard();
   @override
-  State<_PanelButton> createState() => _PanelButtonState();
+  State<_SetupGuideCard> createState() => _SetupGuideCardState();
 }
 
-class _PanelButtonState extends State<_PanelButton> {
-  double _scale = 1;
+class _SetupGuideCardState extends State<_SetupGuideCard> {
+  final PageController _pages = PageController();
+  List<String> _images = const [];
+  int _page = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadImages();
+  }
+
+  Future<void> _loadImages() async {
+    final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
+    final imgs = manifest
+        .listAssets()
+        .where((a) =>
+            a.startsWith('assets/setup/') &&
+            RegExp(r'\.(png|jpe?g|webp)$', caseSensitive: false).hasMatch(a))
+        .toList()
+      ..sort();
+    if (mounted) setState(() => _images = imgs);
+  }
+
+  @override
+  void dispose() {
+    _pages.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _scale = 0.93),
-      onTapCancel: () => setState(() => _scale = 1),
-      onTapUp: (_) => setState(() => _scale = 1),
-      onTap: widget.onTap,
-      child: AnimatedScale(
-        scale: _scale,
-        duration: const Duration(milliseconds: 110),
-        child: Container(
-          padding: widget.padding,
-          decoration: BoxDecoration(
-            color: widget.filledDark
-                ? const Color(0xFF1C1C2E)
-                : Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: widget.filledDark
-                ? null
-                : Border.all(
-                    color: Colors.black.withValues(alpha: 0.08)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black
-                    .withValues(alpha: widget.filledDark ? 0.18 : 0.07),
-                blurRadius: widget.filledDark ? 8 : 4,
-                offset: const Offset(0, 2),
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: _card,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.tips_and_updates_outlined,
+                  color: _textPrimary, size: 22),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text('Comment installer le raccourci',
+                    style: GoogleFonts.montserrat(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: _textPrimary)),
               ),
             ],
           ),
-          child: widget.child,
-        ),
+          const SizedBox(height: 8),
+          Text(
+            'Fais défiler les étapes pour configurer la fenêtre rapide sur ton iPhone.',
+            style: GoogleFonts.montserrat(
+                fontSize: 13, color: _textSecondary, height: 1.5),
+          ),
+          const SizedBox(height: 14),
+          if (_images.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: _surfaceStrong,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Text(
+                'Aucune image pour l\'instant.\n\nDépose tes captures dans assets/setup/ (etape_1.png, etape_2.png, …) : elles apparaîtront ici dans l\'ordre.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.montserrat(
+                    fontSize: 12, color: _textSecondary, height: 1.6),
+              ),
+            )
+          else ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: SizedBox(
+                height: 420,
+                child: PageView.builder(
+                  controller: _pages,
+                  itemCount: _images.length,
+                  onPageChanged: (i) => setState(() => _page = i),
+                  itemBuilder: (context, i) => Container(
+                    color: _surfaceStrong,
+                    child: Image.asset(_images[i], fit: BoxFit.contain),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                for (int i = 0; i < _images.length; i++)
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: i == _page ? 18 : 7,
+                    height: 7,
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    decoration: BoxDecoration(
+                      color: i == _page ? _textPrimary : _border,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Center(
+              child: Text('Étape ${_page + 1} sur ${_images.length}',
+                  style: GoogleFonts.montserrat(
+                      fontSize: 12, color: _textSecondary)),
+            ),
+          ],
+        ],
       ),
     );
   }

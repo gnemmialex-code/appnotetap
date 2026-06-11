@@ -242,8 +242,10 @@ struct PanelView: View {
       .tint(.black)
     }
     .padding()
-    // Pas de .background() opaque sur la racine : le système fournit
-    // le fond de la carte flottante.
+    // Le système fournit le fond « verre » de la carte flottante ; on y
+    // superpose un voile blanc translucide pour éclaircir légèrement
+    // l'effet Glass sans le rendre opaque.
+    .background(Color.white.opacity(0.28))
   }
 
   private func actionTile(intent: some AppIntent, icon: String, label: String) -> some View {

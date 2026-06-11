@@ -85,18 +85,26 @@ class Todo {
       );
 }
 
-/// Événement d'agenda (local).
+/// Événement d'agenda. `deviceId` est l'identifiant EventKit quand
+/// l'événement vit dans le vrai Calendrier de l'iPhone (Agenda synchronisé).
+/// `calendarName` / `editable` ne sont remplis que pour ces événements-là.
 class CalEvent {
   final String id;
   String title;
   DateTime when;
   String note;
+  String? deviceId;
+  String calendarName;
+  bool editable;
 
   CalEvent({
     required this.id,
     required this.title,
     required this.when,
     this.note = '',
+    this.deviceId,
+    this.calendarName = '',
+    this.editable = true,
   });
 
   Map<String, dynamic> toJson() => {
@@ -104,6 +112,7 @@ class CalEvent {
         'title': title,
         'when': when.toIso8601String(),
         'note': note,
+        'deviceId': deviceId,
       };
 
   factory CalEvent.fromJson(Map<String, dynamic> j) => CalEvent(
@@ -111,6 +120,7 @@ class CalEvent {
         title: j['title'] as String? ?? '',
         when: DateTime.parse(j['when'] as String),
         note: j['note'] as String? ?? '',
+        deviceId: j['deviceId'] as String?,
       );
 }
 

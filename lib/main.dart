@@ -33,18 +33,16 @@ double _themeT = 0;
 Color _mix(int light, int dark) =>
     Color.lerp(Color(light), Color(dark), _themeT)!;
 
-Color get _bg            => _mix(0xFFF5F5FA, 0xFF15151B);
-Color get _surface       => _mix(0xFFFFFFFF, 0xFF1E1E27);
-Color get _surfaceStrong => _mix(0xFFEEEEF6, 0xFF2A2A35);
-Color get _textPrimary   => _mix(0xFF1C1C2E, 0xFFF2F2F7);
-Color get _textSecondary => _mix(0xFF888898, 0xFF9A9AAA);
-Color get _border        => _mix(0xFFEAEAF2, 0xFF33333E);
-Color get _textFaint     => _mix(0xFFBBBBCC, 0xFF6C6C7A);
-Color get _iconFaint     => _mix(0xFFCCCCE0, 0xFF4A4A58);
+Color get _bg            => _mix(0xFFFFFFFF, 0xFF000000);
+Color get _surface       => _mix(0xFFFFFFFF, 0xFF111111);
+Color get _surfaceStrong => _mix(0xFFF0F0F5, 0xFF1C1C1C);
+Color get _textPrimary   => _mix(0xFF1C1C2E, 0xFFFFFFFF);
+Color get _textSecondary => _mix(0xFF888898, 0xFF8E8E93);
+Color get _border        => _mix(0xFFE2E2EA, 0xFF2C2C2C);
+Color get _textFaint     => _mix(0xFFBBBBCC, 0xFF555555);
+Color get _iconFaint     => _mix(0xFFCCCCE0, 0xFF444444);
 
-/// Couleur posée SUR un fond `_textPrimary` (boutons pleins) :
-/// blanc en mode clair, sombre en mode sombre.
-Color get _onPrimary     => _mix(0xFFFFFFFF, 0xFF15151B);
+Color get _onPrimary     => _mix(0xFFFFFFFF, 0xFF000000);
 
 String _uid() => DateTime.now().microsecondsSinceEpoch.toRadixString(36);
 
@@ -108,6 +106,7 @@ class _TapBackAppState extends State<TapBackApp>
     final scheme = dark
         ? ColorScheme.dark(
             surface: _bg,
+            onSurface: _textPrimary,
             primary: _textPrimary,
             onPrimary: _onPrimary,
             secondary: _textPrimary,
@@ -115,6 +114,7 @@ class _TapBackAppState extends State<TapBackApp>
           )
         : ColorScheme.light(
             surface: _bg,
+            onSurface: _textPrimary,
             primary: _textPrimary,
             onPrimary: _onPrimary,
             secondary: _textPrimary,

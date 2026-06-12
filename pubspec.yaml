@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+17
+version: 1.0.0+19
 
 environment:
   sdk: ^3.11.5
@@ -46,6 +46,8 @@ dependencies:
   flutter_timezone: ^5.1.0
   image_picker: ^1.2.2
   google_fonts: ^6.2.1
+  # Lecture des vidéos du tutoriel d'accueil (onboarding.dart)
+  video_player: ^2.9.2
 
 dev_dependencies:
   flutter_test:
@@ -73,6 +75,10 @@ flutter:
     # Images du guide « Mettre en place » (Réglages) : dépose ici
     # etape_1.png, etape_2.png, … — elles s'affichent dans l'ordre.
     - assets/setup/
+    # Tutoriel d'accueil (avant-page) : images etape_1.png … etape_9.png.
+    - assets/onboarding/
+    # Vidéos du tutoriel : raccourcis.mp4, parametres.mp4, test.mp4.
+    - assets/onboarding/videos/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

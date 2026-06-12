@@ -151,9 +151,9 @@ class _TapBackAppState extends State<TapBackApp>
         labelColor: _textPrimary,
         unselectedLabelColor: _textSecondary,
         labelStyle:
-            GoogleFonts.montserrat(fontSize: 15, fontWeight: FontWeight.w700),
+            GoogleFonts.montserrat(fontSize: 16, fontWeight: FontWeight.w700),
         unselectedLabelStyle:
-            GoogleFonts.montserrat(fontSize: 15, fontWeight: FontWeight.w500),
+            GoogleFonts.montserrat(fontSize: 16, fontWeight: FontWeight.w500),
         indicator: BoxDecoration(
           color: _textPrimary.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(12),
@@ -354,14 +354,14 @@ class _Empty extends StatelessWidget {
             const SizedBox(height: 12),
             Text(title,
                 style: GoogleFonts.montserrat(
-                    fontSize: 18,
+                    fontSize: 20,
                     fontWeight: FontWeight.w600,
                     color: _textPrimary)),
             const SizedBox(height: 6),
             Text(message,
                 textAlign: TextAlign.center,
                 style: GoogleFonts.montserrat(
-                    fontSize: 14, color: _textSecondary, height: 1.5)),
+                    fontSize: 16, color: _textSecondary, height: 1.5)),
           ],
         ),
       ),
@@ -414,7 +414,7 @@ class NotesScreen extends StatelessWidget {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.montserrat(
-                                  fontSize: 16,
+                                  fontSize: 18,
                                   fontWeight: FontWeight.w600,
                                   color: _textPrimary)),
                         ),
@@ -430,11 +430,11 @@ class NotesScreen extends StatelessWidget {
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.montserrat(
-                              fontSize: 14, color: _textSecondary, height: 1.4)),
+                              fontSize: 16, color: _textSecondary, height: 1.4)),
                     const SizedBox(height: 6),
                     Text(formatStamp(n.createdAt),
                         style: GoogleFonts.montserrat(
-                            fontSize: 11, color: _textFaint)),
+                            fontSize: 13, color: _textFaint)),
                   ],
                 ),
               );
@@ -508,7 +508,7 @@ class _TodosScreenState extends State<TodosScreen> {
                 style: GoogleFonts.montserrat(
                     color: selected ? _onPrimary : _textSecondary,
                     fontWeight: FontWeight.w600,
-                    fontSize: 14)),
+                    fontSize: 15)),
           ),
         ),
       );
@@ -563,7 +563,7 @@ class _TodosScreenState extends State<TodosScreen> {
         maxLines: 3,
         overflow: TextOverflow.ellipsis,
         style: GoogleFonts.montserrat(
-            fontSize: 12, color: _textSecondary, height: 1.4),
+            fontSize: 14, color: _textSecondary, height: 1.4),
       ),
     );
   }
@@ -594,7 +594,7 @@ class _TodosScreenState extends State<TodosScreen> {
                   Text(
                     t.text,
                     style: GoogleFonts.montserrat(
-                      fontSize: 15,
+                      fontSize: 17,
                       decoration:
                           t.done ? TextDecoration.lineThrough : null,
                       color: t.done
@@ -606,7 +606,7 @@ class _TodosScreenState extends State<TodosScreen> {
                   if (t.done)
                     Text('Fait · retiré de la liste dans 24 h',
                         style: GoogleFonts.montserrat(
-                            fontSize: 11, color: _textSecondary)),
+                            fontSize: 13, color: _textSecondary)),
                 ],
               ),
             ),
@@ -642,18 +642,19 @@ class _TodosScreenState extends State<TodosScreen> {
                 children: [
                   Text(t.text,
                       style: GoogleFonts.montserrat(
+                          fontSize: 16,
                           color: _textSecondary,
                           decoration: TextDecoration.lineThrough)),
                   if (t.description.isNotEmpty) _description(t),
                   const SizedBox(height: 4),
                   Text('Créée : ${formatStamp(t.createdAt)}',
                       style: GoogleFonts.montserrat(
-                          fontSize: 11,
+                          fontSize: 13,
                           color: _textFaint)),
                   if (t.doneAt != null)
                     Text('Faite : ${formatStamp(t.doneAt!)}',
                         style: GoogleFonts.montserrat(
-                            fontSize: 11,
+                            fontSize: 13,
                             color: Colors.green.shade600)),
                 ],
               ),
@@ -710,7 +711,7 @@ class ReadingScreen extends StatelessWidget {
                             maxLines: 3,
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.montserrat(
-                              fontSize: 15,
+                              fontSize: 17,
                               decoration: it.done
                                   ? TextDecoration.lineThrough
                                   : null,
@@ -725,12 +726,12 @@ class ReadingScreen extends StatelessWidget {
                               child: Text(
                                   '⏰ ${formatStamp(it.remindAt!)}',
                                   style: GoogleFonts.montserrat(
-                                      fontSize: 11,
+                                      fontSize: 13,
                                       color: Colors.orange.shade700)),
                             ),
                           Text('Ajouté : ${formatStamp(it.createdAt)}',
                               style: GoogleFonts.montserrat(
-                                  fontSize: 11,
+                                  fontSize: 13,
                                   color: _textFaint)),
                         ],
                       ),
@@ -798,7 +799,10 @@ class _CaptureHubState extends State<CaptureHub>
         Expanded(
           child: TabBarView(
             controller: _c,
-            children: const [
+            // Pas de `const` ici : des enfants const ne sont jamais
+            // reconstruits, donc une suppression (corbeille) resterait
+            // affichée jusqu'au changement d'onglet.
+            children: [
               NotesScreen(embedded: true),
               TodosScreen(embedded: true),
               ReadingScreen(embedded: true),

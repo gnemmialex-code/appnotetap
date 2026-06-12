@@ -242,10 +242,8 @@ struct PanelView: View {
       .tint(.black)
     }
     .padding()
-    // Le système fournit le fond « verre » de la carte flottante ; on y
-    // superpose un voile blanc translucide pour éclaircir légèrement
-    // l'effet Glass sans le rendre opaque.
-    .background(Color.white.opacity(0.28))
+    // Le système fournit le fond « verre » de la carte flottante :
+    // aucun fond ajouté ici pour garder l'effet Glass pur.
   }
 
   private func actionTile(intent: some AppIntent, icon: String, label: String) -> some View {
@@ -258,7 +256,9 @@ struct PanelView: View {
       }
       .frame(maxWidth: .infinity)
       .padding(.vertical, 10)
-      .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 14))
+      // Matériau translucide (pas de gris opaque) : les tuiles gardent
+      // leur forme tout en laissant l'effet verre du panneau visible.
+      .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
     }
     .buttonStyle(.plain)
   }

@@ -23,8 +23,9 @@ import SwiftUI
 
 enum ShortistNativeStore {
 
-  private static let notesKey = "flutter.tbc_notes"
-  private static let todosKey = "flutter.tbc_todos"
+  private static let appGroup  = "group.com.gnemmialex.tapbacknote"
+  private static let notesKey   = "flutter.tbc_notes"
+  private static let todosKey   = "flutter.tbc_todos"
   private static let readingKey = "flutter.tbc_reading"
 
   /// Même format d'identifiant que `_uid()` côté Dart
@@ -83,6 +84,9 @@ enum ShortistNativeStore {
       let raw = String(data: data, encoding: .utf8)
     else { return }
     UserDefaults.standard.set(raw, forKey: key)
+    // Miroir dans l'App Group pour que le Widget Home Screen voie les
+    // modifications en temps réel (même sans ouvrir l'app).
+    UserDefaults(suiteName: appGroup)?.set(raw, forKey: key)
   }
 
   // --- Écritures (mêmes formes JSON que models.dart) ---

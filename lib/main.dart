@@ -457,7 +457,7 @@ class _TodosScreenState extends State<TodosScreen> {
   @override
   Widget build(BuildContext context) {
     final all = store.todos;
-    final active = all.where((t) => !t.archived).toList();
+    final active = all.where((t) => !t.done).toList();
     final done = all.where((t) => t.done).toList()
       ..sort((a, b) =>
           (b.doneAt ?? b.createdAt).compareTo(a.doneAt ?? a.createdAt));
@@ -465,7 +465,7 @@ class _TodosScreenState extends State<TodosScreen> {
 
     final body = Column(
       children: [
-        _segmented(active.length, done.length),
+        _header(active.length, done.length),
         Expanded(
           child: list.isEmpty
               ? _emptyFor(_showArchive)
@@ -474,12 +474,56 @@ class _TodosScreenState extends State<TodosScreen> {
                   itemCount: list.length,
                   itemBuilder: (context, i) => _showArchive
                       ? _archiveTile(list[i])
-                      : _activeTile(list[i]),
+                      : _TodoTile(
+                          key: ValueKey(list[i].id),
+                          todo: list[i],
+                          onEdit: () => _editTodo(list[i]),
+                        ),
                 ),
         ),
       ],
     );
     return widget.embedded ? body : _Page(title: 'To-Do', child: body);
+  }
+
+  Widget _header(int activeCount, int doneCount) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 8, 10),
+      child: Row(
+        children: [
+          Expanded(child: _segmented(activeCount, doneCount)),
+          if (!_showArchive)
+            IconButton(
+              icon: Icon(Icons.add_circle_outline,
+                  size: 28, color: _textPrimary),
+              onPressed: _addTodo,
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _addTodo() {
+    final text = TextEditingController();
+    final desc = TextEditingController();
+    _showSheet(context, 'Nouvelle tâche', (setSheet) {
+      return [
+        _sheetField(text, 'Tâche…'),
+        const SizedBox(height: 8),
+        _sheetField(desc, 'Description (optionnel)…', maxLines: 3),
+        const SizedBox(height: 14),
+        _sheetPrimary('Ajouter', () {
+          if (text.text.trim().isEmpty) return;
+          store.addTodo(Todo(
+            id: _uid(),
+            createdAt: DateTime.now(),
+            text: text.text.trim(),
+            description: desc.text.trim(),
+          ));
+          Navigator.of(context).pop();
+        }),
+      ];
+    });
   }
 
   Widget _segmented(int activeCount, int doneCount) {
@@ -515,7 +559,6 @@ class _TodosScreenState extends State<TodosScreen> {
     }
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
       decoration: BoxDecoration(
           color: _surfaceStrong, borderRadius: BorderRadius.circular(14)),
       child: Row(
@@ -533,10 +576,8 @@ class _TodosScreenState extends State<TodosScreen> {
       ? const _Empty(Icons.history, 'Aucune tâche terminée',
           'Les tâches cochées sont conservées ici avec leurs dates.')
       : const _Empty(Icons.checklist, 'Aucune tâche',
-          'Touche « Tap Back » puis To-Do pour ajouter une tâche.');
+          'Touche + pour ajouter ta première tâche.');
 
-  /// Feuille d'édition : modifier le texte et ajouter/compléter
-  /// la description d'une tâche.
   void _editTodo(Todo t) {
     final text = TextEditingController(text: t.text);
     final desc = TextEditingController(text: t.description);
@@ -553,72 +594,6 @@ class _TodosScreenState extends State<TodosScreen> {
         }),
       ];
     });
-  }
-
-  Widget _description(Todo t) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 2),
-      child: Text(
-        t.description,
-        maxLines: 3,
-        overflow: TextOverflow.ellipsis,
-        style: GoogleFonts.montserrat(
-            fontSize: 14, color: _textSecondary, height: 1.4),
-      ),
-    );
-  }
-
-  Widget _activeTile(Todo t) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: _card,
-      child: Row(
-        children: [
-          IconButton(
-            icon: Icon(
-                t.done
-                    ? Icons.check_circle
-                    : Icons.radio_button_unchecked,
-                size: 28),
-            color: t.done ? Colors.green : _textSecondary,
-            onPressed: () => store.toggleTodo(t.id),
-          ),
-          Expanded(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => _editTodo(t),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    t.text,
-                    style: GoogleFonts.montserrat(
-                      fontSize: 17,
-                      decoration:
-                          t.done ? TextDecoration.lineThrough : null,
-                      color: t.done
-                          ? _textFaint
-                          : _textPrimary,
-                    ),
-                  ),
-                  if (t.description.isNotEmpty) _description(t),
-                  if (t.done)
-                    Text('Fait · retiré de la liste dans 24 h',
-                        style: GoogleFonts.montserrat(
-                            fontSize: 13, color: _textSecondary)),
-                ],
-              ),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline, size: 24),
-            color: _textSecondary,
-            onPressed: () => store.deleteTodo(t.id),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _archiveTile(Todo t) {
@@ -645,17 +620,25 @@ class _TodosScreenState extends State<TodosScreen> {
                           fontSize: 16,
                           color: _textSecondary,
                           decoration: TextDecoration.lineThrough)),
-                  if (t.description.isNotEmpty) _description(t),
+                  if (t.description.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        t.description,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.montserrat(
+                            fontSize: 14, color: _textSecondary, height: 1.4),
+                      ),
+                    ),
                   const SizedBox(height: 4),
                   Text('Créée : ${formatStamp(t.createdAt)}',
                       style: GoogleFonts.montserrat(
-                          fontSize: 13,
-                          color: _textFaint)),
+                          fontSize: 13, color: _textFaint)),
                   if (t.doneAt != null)
                     Text('Faite : ${formatStamp(t.doneAt!)}',
                         style: GoogleFonts.montserrat(
-                            fontSize: 13,
-                            color: Colors.green.shade600)),
+                            fontSize: 13, color: Colors.green.shade600)),
                 ],
               ),
             ),
@@ -666,6 +649,196 @@ class _TodosScreenState extends State<TodosScreen> {
             onPressed: () => store.deleteTodo(t.id),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─── Tile animée pour les tâches actives ───────────────────────────────────
+// Quand l'utilisateur coche la case :
+//   1. L'icône vire au vert et rebondit (spring).
+//   2. Le fond flashe légèrement en vert.
+//   3. La ligne glisse vers la droite et disparaît en fondu.
+//   4. La hauteur s'efface (collapse), faisant remonter les items du dessous.
+//   5. store.toggleTodo() est appelé : la tâche passe dans « Terminées ».
+
+class _TodoTile extends StatefulWidget {
+  final Todo todo;
+  final VoidCallback onEdit;
+  const _TodoTile({super.key, required this.todo, required this.onEdit});
+
+  @override
+  State<_TodoTile> createState() => _TodoTileState();
+}
+
+class _TodoTileState extends State<_TodoTile>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 640),
+  );
+
+  // Rebond du check : 1 → 1.35 → 1 sur les 35 premières %
+  late final Animation<double> _iconScale = TweenSequence<double>([
+    TweenSequenceItem(
+      tween: Tween(begin: 1.0, end: 1.35)
+          .chain(CurveTween(curve: Curves.easeOut)),
+      weight: 18,
+    ),
+    TweenSequenceItem(
+      tween: Tween(begin: 1.35, end: 1.0)
+          .chain(CurveTween(curve: Curves.easeInOut)),
+      weight: 17,
+    ),
+    TweenSequenceItem(tween: ConstantTween(1.0), weight: 65),
+  ]).animate(_ctrl);
+
+  // Flash vert en fond : 0 → 0.12 → 0 sur les 40 premières %
+  late final Animation<double> _bgAlpha = TweenSequence<double>([
+    TweenSequenceItem(
+      tween: Tween(begin: 0.0, end: 0.12)
+          .chain(CurveTween(curve: Curves.easeOut)),
+      weight: 20,
+    ),
+    TweenSequenceItem(
+      tween: Tween(begin: 0.12, end: 0.0)
+          .chain(CurveTween(curve: Curves.easeIn)),
+      weight: 20,
+    ),
+    TweenSequenceItem(tween: ConstantTween(0.0), weight: 60),
+  ]).animate(_ctrl);
+
+  // Fondu : 1 → 0 de 35 % à 80 %
+  late final Animation<double> _fade =
+      Tween<double>(begin: 1.0, end: 0.0).animate(
+    CurvedAnimation(
+        parent: _ctrl,
+        curve: const Interval(0.35, 0.80, curve: Curves.easeInCubic)),
+  );
+
+  // Glissement vers la droite : de 35 % à 80 %
+  late final Animation<Offset> _slide =
+      Tween<Offset>(begin: Offset.zero, end: const Offset(0.1, 0)).animate(
+    CurvedAnimation(
+        parent: _ctrl,
+        curve: const Interval(0.35, 0.80, curve: Curves.easeIn)),
+  );
+
+  // Collapse de la hauteur : 1 → 0 de 72 % à 100 %
+  late final Animation<double> _size =
+      Tween<double>(begin: 1.0, end: 0.0).animate(
+    CurvedAnimation(
+        parent: _ctrl,
+        curve: const Interval(0.72, 1.0, curve: Curves.easeInOut)),
+  );
+
+  bool _animating = false;
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _onCheck() async {
+    if (_animating) return;
+    _animating = true;
+    await _ctrl.forward();
+    if (mounted) store.toggleTodo(widget.todo.id);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.todo;
+    return SizeTransition(
+      sizeFactor: _size,
+      alignment: Alignment.topCenter,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: FadeTransition(
+          opacity: _fade,
+          child: SlideTransition(
+            position: _slide,
+            child: AnimatedBuilder(
+              animation: _ctrl,
+              builder: (context, _) => Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Color.lerp(_surface, Colors.green, _bgAlpha.value),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: _border),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _textPrimary.withValues(alpha: 0.05),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    GestureDetector(
+                      onTap: _onCheck,
+                      child: Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Transform.scale(
+                          scale: _iconScale.value,
+                          child: Icon(
+                            _ctrl.value > 0.01
+                                ? Icons.check_circle
+                                : Icons.radio_button_unchecked,
+                            size: 28,
+                            color: _ctrl.value > 0.01
+                                ? Colors.green
+                                : _textSecondary,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: widget.onEdit,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              t.text,
+                              style: GoogleFonts.montserrat(
+                                fontSize: 17,
+                                color: _textPrimary,
+                              ),
+                            ),
+                            if (t.description.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Text(
+                                  t.description,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 14,
+                                    color: _textSecondary,
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, size: 24),
+                      color: _textSecondary,
+                      onPressed: () => store.deleteTodo(t.id),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

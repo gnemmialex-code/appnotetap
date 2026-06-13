@@ -1,9 +1,12 @@
 // Persistance locale via shared_preferences (JSON encodé).
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'models.dart';
+
+const _tapbackChannel = MethodChannel('com.gnemmialex.tapbacknote/tapback');
 
 /// Source de vérité de l'app. `ChangeNotifier` pour rafraîchir l'UI.
 class Store extends ChangeNotifier {
@@ -36,6 +39,9 @@ class Store extends ChangeNotifier {
   bool get loaded => _loaded;
 
   Future<void> load() async {
+    // Fusionne d'abord les éléments ajoutés via le Widget Home Screen
+    // (ils écrivent dans l'App Group UserDefaults) vers le stockage standard.
+    await _widgetMerge();
     final prefs = await SharedPreferences.getInstance();
     // Le panneau système (App Intents natifs, ios/Runner/QuickPanel.swift)
     // écrit directement dans UserDefaults pendant que l'app est en
@@ -92,6 +98,22 @@ class Store extends ChangeNotifier {
   Future<void> _save(String key, List items) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(key, jsonEncode(items.map((e) => e.toJson()).toList()));
+    // Copie dans l'App Group et recharge les widgets (fire & forget).
+    _widgetSync();
+  }
+
+  // Copie les données standard → App Group + recharge les timelines widgets.
+  Future<void> _widgetSync() async {
+    try {
+      await _tapbackChannel.invokeMethod('widgetSync');
+    } catch (_) {}
+  }
+
+  // Fusionne les éléments ajoutés via le Widget (App Group → standard).
+  Future<void> _widgetMerge() async {
+    try {
+      await _tapbackChannel.invokeMethod('widgetMerge');
+    } catch (_) {}
   }
 
   // --- Notes ---

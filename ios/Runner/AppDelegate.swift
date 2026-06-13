@@ -1,10 +1,14 @@
 import Flutter
 import UIKit
 import EventKit
+import WidgetKit
 
 #if canImport(AppIntents)
 import AppIntents
 #endif
+
+private let kAppGroup = "group.com.gnemmialex.tapbacknote"
+private let kWidgetKeys = ["flutter.tbc_todos", "flutter.tbc_notes", "flutter.tbc_reading"]
 
 // MARK: - App Delegate
 
@@ -187,6 +191,54 @@ import AppIntents
         } catch {
           result(false)
         }
+
+      // ── Widget Home Screen ─────────────────────────────────────────────
+      // widgetSync : copie standard → App Group + recharge les timelines.
+      // Appelé par store.dart après chaque sauvegarde.
+      case "widgetSync":
+        let groupDef = UserDefaults(suiteName: kAppGroup)
+        for key in kWidgetKeys {
+          if let raw = UserDefaults.standard.string(forKey: key) {
+            groupDef?.set(raw, forKey: key)
+          }
+        }
+        WidgetCenter.shared.reloadAllTimelines()
+        result(nil)
+
+      // widgetMerge : fusionne App Group → standard (éléments ajoutés via widget).
+      // Appelé par store.dart avant prefs.reload() au premier plan.
+      case "widgetMerge":
+        guard let groupDef = UserDefaults(suiteName: kAppGroup) else {
+          result(nil); return
+        }
+        for key in kWidgetKeys {
+          guard
+            let grpRaw = groupDef.string(forKey: key), !grpRaw.isEmpty,
+            let grpData = grpRaw.data(using: .utf8),
+            let grpList = try? JSONSerialization.jsonObject(with: grpData) as? [[String: Any]]
+          else { continue }
+
+          let stdRaw = UserDefaults.standard.string(forKey: key) ?? ""
+          var stdList: [[String: Any]] = []
+          if !stdRaw.isEmpty,
+             let stdData = stdRaw.data(using: .utf8),
+             let parsed = try? JSONSerialization.jsonObject(with: stdData) as? [[String: Any]] {
+            stdList = parsed
+          }
+
+          let stdIds = Set(stdList.compactMap { $0["id"] as? String })
+          let newItems = grpList.filter { !(stdIds.contains($0["id"] as? String ?? "")) }
+          guard !newItems.isEmpty else { continue }
+
+          var merged = stdList + newItems
+          merged.sort { ($0["createdAt"] as? String ?? "") > ($1["createdAt"] as? String ?? "") }
+          if let data = try? JSONSerialization.data(withJSONObject: merged),
+             let raw = String(data: data, encoding: .utf8) {
+            UserDefaults.standard.set(raw, forKey: key)
+            groupDef.set(raw, forKey: key)
+          }
+        }
+        result(nil)
 
       default:
         result(FlutterMethodNotImplemented)

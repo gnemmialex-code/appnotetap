@@ -1,8 +1,10 @@
 // Onboarding en 2 phases :
-//   1. Présentation de l'app (4 slides animés, design sombre)
+//   1. Présentation de l'app (5 slides animés, design sombre)
 //   2. Installation (3 vidéos : raccourcis, paramètres, test)
 //
 // L'ensemble ne s'affiche qu'une seule fois (flag backTapSetupDone).
+
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show AssetManifest, rootBundle;
@@ -19,7 +21,10 @@ class _SlideData {
   final String title;
   final String body;
   final Color accent;
-  const _SlideData(this.icon, this.title, this.body, this.accent);
+  final String tag;
+  final bool isShowcase;
+  const _SlideData(this.icon, this.title, this.body, this.accent,
+      {this.tag = '', this.isShowcase = false});
 }
 
 const _slides = <_SlideData>[
@@ -28,25 +33,46 @@ const _slides = <_SlideData>[
     'Capturez en 2 secondes',
     'Un double-tap au dos de votre iPhone — le panneau Shortist apparaît par-dessus n\'importe quel écran.',
     Color(0xFF7C5CBF),
+    tag: '⚡ Instantané',
   ),
   _SlideData(
     Icons.flash_on_rounded,
     'Notes & To-Do instantanés',
     'Ajoutez une note rapide, cochez une tâche ou sauvegardez un lien — sans quitter votre application.',
     Color(0xFF00A876),
+    tag: '📱 Depuis n\'importe où',
   ),
   _SlideData(
     Icons.event_note_rounded,
     'Agenda synchronisé',
     'Consultez et créez des événements directement dans votre Calendrier iPhone, depuis Shortist.',
     Color(0xFF1A86CF),
+    tag: '🗓️ Calendrier iPhone',
   ),
   _SlideData(
     Icons.bookmark_add_rounded,
     'Rien ne se perd',
     'Liens, images, idées — tout est capturé, organisé et consultable en un instant avec rappels.',
     Color(0xFFE06542),
+    tag: '🔖 Tout organisé',
   ),
+  _SlideData(
+    Icons.auto_awesome_rounded,
+    'Et bien plus encore…',
+    'Widget, Carnet personnel, thème sombre, rappels — Shortist évolue avec vous, chaque jour.',
+    Color(0xFFAB47BC),
+    tag: '✨ Toujours plus',
+    isShowcase: true,
+  ),
+];
+
+const _showcaseFeatures = <(IconData, String)>[
+  (Icons.widgets_rounded, 'Widget'),
+  (Icons.menu_book_rounded, 'Carnet'),
+  (Icons.dark_mode_rounded, 'Thème'),
+  (Icons.cloud_done_rounded, 'iCloud'),
+  (Icons.notifications_active_rounded, 'Rappels'),
+  (Icons.person_rounded, 'Profil'),
 ];
 
 const _videoParts = <(String, String, IconData)>[
@@ -84,8 +110,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       switchInCurve: Curves.easeOutCubic,
       switchOutCurve: Curves.easeInCubic,
       transitionBuilder: (child, anim) => SlideTransition(
-        position: Tween<Offset>(
-                begin: const Offset(1, 0), end: Offset.zero)
+        position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
             .animate(anim),
         child: child,
       ),
@@ -134,86 +159,130 @@ class _PresentationPhaseState extends State<_PresentationPhase> {
     final accent = _slides[_page].accent;
     return Scaffold(
       backgroundColor: const Color(0xFF0D0D18),
-      body: SafeArea(
-        child: Column(
-          children: [
-            // ── Top bar ────────────────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 14, 12, 0),
-              child: Row(
-                children: [
-                  Text('Shortist',
-                      style: GoogleFonts.montserrat(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white)),
-                  const Spacer(),
-                  GestureDetector(
-                    onTap: widget.onNext,
-                    child: Padding(
-                      padding: const EdgeInsets.all(10),
-                      child: Row(
-                        children: [
-                          Text('Installer',
-                              style: GoogleFonts.montserrat(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white38)),
-                          const SizedBox(width: 4),
-                          const Icon(Icons.arrow_forward_ios,
-                              size: 12, color: Colors.white24),
-                        ],
-                      ),
-                    ),
-                  ),
+      body: Stack(
+        children: [
+          // Ambient top glow — suit la couleur d'accent
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 450),
+            curve: Curves.easeOut,
+            width: double.infinity,
+            height: 380,
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: const Alignment(0.0, -0.65),
+                radius: 0.9,
+                colors: [
+                  accent.withValues(alpha: 0.20),
+                  accent.withValues(alpha: 0.05),
+                  Colors.transparent,
                 ],
               ),
             ),
-            // ── Slides ─────────────────────────────────────────────────────
-            Expanded(
-              child: PageView.builder(
-                controller: _pageCtrl,
-                itemCount: _slides.length,
-                onPageChanged: (i) => setState(() => _page = i),
-                itemBuilder: (context, i) => _SlideCard(
-                  key: ValueKey(i),
-                  data: _slides[i],
-                  isActive: i == _page,
+          ),
+          // Ambient bottom glow
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 450),
+              curve: Curves.easeOut,
+              width: double.infinity,
+              height: 220,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  colors: [
+                    accent.withValues(alpha: 0.10),
+                    Colors.transparent,
+                  ],
                 ),
               ),
             ),
-            // ── Dots ───────────────────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.only(bottom: 22),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  for (int i = 0; i < _slides.length; i++)
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 280),
-                      curve: Curves.easeInOut,
-                      width: i == _page ? 22 : 7,
-                      height: 7,
-                      margin: const EdgeInsets.symmetric(horizontal: 3),
-                      decoration: BoxDecoration(
-                        color: i == _page ? accent : Colors.white.withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(4),
+          ),
+          SafeArea(
+            child: Column(
+              children: [
+                // ── Top bar ──────────────────────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 14, 12, 0),
+                  child: Row(
+                    children: [
+                      Text('Shortist',
+                          style: GoogleFonts.montserrat(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white)),
+                      const Spacer(),
+                      GestureDetector(
+                        onTap: widget.onNext,
+                        child: Padding(
+                          padding: const EdgeInsets.all(10),
+                          child: Row(
+                            children: [
+                              Text('Installer',
+                                  style: GoogleFonts.montserrat(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white38)),
+                              const SizedBox(width: 4),
+                              const Icon(Icons.arrow_forward_ios,
+                                  size: 12, color: Colors.white24),
+                            ],
+                          ),
+                        ),
                       ),
+                    ],
+                  ),
+                ),
+                // ── Slides ───────────────────────────────────────────────
+                Expanded(
+                  child: PageView.builder(
+                    controller: _pageCtrl,
+                    itemCount: _slides.length,
+                    onPageChanged: (i) => setState(() => _page = i),
+                    itemBuilder: (context, i) => _SlideCard(
+                      key: ValueKey(i),
+                      data: _slides[i],
+                      isActive: i == _page,
                     ),
-                ],
-              ),
+                  ),
+                ),
+                // ── Dots ─────────────────────────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 22),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      for (int i = 0; i < _slides.length; i++)
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 280),
+                          curve: Curves.easeInOut,
+                          width: i == _page ? 22 : 7,
+                          height: 7,
+                          margin: const EdgeInsets.symmetric(horizontal: 3),
+                          decoration: BoxDecoration(
+                            color: i == _page
+                                ? accent
+                                : Colors.white.withValues(alpha: 0.18),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                // ── Bouton ───────────────────────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(28, 0, 28, 32),
+                  child: _PresentButton(
+                    label: _isLast ? 'Installer Shortist' : 'Suivant',
+                    accent: accent,
+                    onTap: _next,
+                  ),
+                ),
+              ],
             ),
-            // ── Bouton ─────────────────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.fromLTRB(28, 0, 28, 32),
-              child: _PresentButton(
-                label: _isLast ? 'Installer Shortist' : 'Suivant',
-                accent: accent,
-                onTap: _next,
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -229,25 +298,25 @@ class _SlideCard extends StatefulWidget {
   State<_SlideCard> createState() => _SlideCardState();
 }
 
-class _SlideCardState extends State<_SlideCard>
-    with TickerProviderStateMixin {
-  // Entrée : déclenché quand isActive passe à true
+class _SlideCardState extends State<_SlideCard> with TickerProviderStateMixin {
   late final AnimationController _enter = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 780),
+    duration: const Duration(milliseconds: 800),
   );
-  // Flottement continu de l'icône
   late final AnimationController _float = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 2800),
   )..repeat(reverse: true);
+  late final AnimationController _ring = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 5),
+  )..repeat();
 
   // ── Animations d'entrée ──────────────────────────────────────────────────
   late final Animation<double> _iconScale = Tween(begin: 0.0, end: 1.0)
       .animate(CurvedAnimation(
           parent: _enter,
-          curve:
-              const Interval(0.0, 0.65, curve: Curves.elasticOut)));
+          curve: const Interval(0.0, 0.65, curve: Curves.elasticOut)));
 
   late final Animation<double> _iconOpacity = Tween(begin: 0.0, end: 1.0)
       .animate(CurvedAnimation(
@@ -263,13 +332,20 @@ class _SlideCardState extends State<_SlideCard>
       Tween<Offset>(begin: const Offset(0, 0.35), end: Offset.zero).animate(
           CurvedAnimation(
               parent: _enter,
-              curve: const Interval(0.22, 0.75,
-                  curve: Curves.easeOutCubic)));
+              curve:
+                  const Interval(0.22, 0.75, curve: Curves.easeOutCubic)));
 
   late final Animation<double> _titleFade = Tween(begin: 0.0, end: 1.0)
       .animate(CurvedAnimation(
           parent: _enter,
           curve: const Interval(0.22, 0.65, curve: Curves.easeOut)));
+
+  late final Animation<Offset> _bodySlide =
+      Tween<Offset>(begin: const Offset(0, 0.25), end: Offset.zero).animate(
+          CurvedAnimation(
+              parent: _enter,
+              curve:
+                  const Interval(0.44, 0.9, curve: Curves.easeOutCubic)));
 
   late final Animation<double> _bodyFade = Tween(begin: 0.0, end: 1.0)
       .animate(CurvedAnimation(
@@ -289,79 +365,279 @@ class _SlideCardState extends State<_SlideCard>
   @override
   void didUpdateWidget(_SlideCard old) {
     super.didUpdateWidget(old);
-    if (widget.isActive && !old.isActive) {
-      _enter.forward(from: 0);
-    }
+    if (widget.isActive && !old.isActive) _enter.forward(from: 0);
   }
 
   @override
   void dispose() {
     _enter.dispose();
     _float.dispose();
+    _ring.dispose();
     super.dispose();
+  }
+
+  // ── Showcase grid (dernière slide) ────────────────────────────────────────
+
+  Widget _showcaseItem(int i, Color accent) {
+    final (icon, label) = _showcaseFeatures[i];
+    final start = 0.06 + i * 0.10;
+    final end = (start + 0.38).clamp(0.0, 1.0);
+    final fadeEnd = (start + 0.22).clamp(0.0, 1.0);
+    final scaleAnim = Tween(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+          parent: _enter,
+          curve: Interval(start, end, curve: Curves.elasticOut)),
+    );
+    final fadeAnim = Tween(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+          parent: _enter,
+          curve: Interval(start, fadeEnd, curve: Curves.easeOut)),
+    );
+    return ScaleTransition(
+      scale: scaleAnim,
+      child: FadeTransition(
+        opacity: fadeAnim,
+        child: SizedBox(
+          width: 72,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: accent.withValues(alpha: 0.13),
+                  border: Border.all(
+                      color: accent.withValues(alpha: 0.30), width: 1.5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: accent.withValues(alpha: 0.22),
+                      blurRadius: 14,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Icon(icon, size: 28, color: accent),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                label,
+                style: GoogleFonts.montserrat(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white.withValues(alpha: 0.60),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildShowcaseGrid(Color accent) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([_enter, _float]),
+      builder: (context, child) => Transform.translate(
+        offset: Offset(0, _floatY.value * 0.35),
+        child: Opacity(
+          opacity: _iconOpacity.value.clamp(0.0, 1.0),
+          child: child,
+        ),
+      ),
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 18,
+        runSpacing: 20,
+        children: [
+          for (int i = 0; i < _showcaseFeatures.length; i++)
+            _showcaseItem(i, accent),
+        ],
+      ),
+    );
+  }
+
+  // ── Zone icône (slides 1-4) ───────────────────────────────────────────────
+
+  Widget _buildIconArea(Color accent) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([_enter, _float, _ring]),
+      builder: (context, _) => Transform.translate(
+        offset: Offset(0, _floatY.value),
+        child: Opacity(
+          opacity: _iconOpacity.value,
+          child: Transform.scale(
+            scale: _iconScale.value,
+            child: SizedBox(
+              width: 230,
+              height: 230,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  // Outer halo
+                  Transform.scale(
+                    scale: _glowScale.value,
+                    child: Container(
+                      width: 230,
+                      height: 230,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(
+                          colors: [
+                            accent.withValues(alpha: 0.24),
+                            accent.withValues(alpha: 0.07),
+                            Colors.transparent,
+                          ],
+                          stops: const [0.0, 0.55, 1.0],
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Anneau tournant extérieur
+                  Transform.rotate(
+                    angle: _ring.value * 2 * math.pi,
+                    child: Container(
+                      width: 168,
+                      height: 168,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: accent.withValues(alpha: 0.14),
+                          width: 1.0,
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Anneau tournant inverse (plus lent)
+                  Transform.rotate(
+                    angle: -_ring.value * 2 * math.pi * 0.55,
+                    child: Container(
+                      width: 192,
+                      height: 192,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: accent.withValues(alpha: 0.08),
+                          width: 0.8,
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Orbiting dot 1 — rapide, rayon moyen
+                  Positioned(
+                    left: 115 +
+                        86 * math.cos(_ring.value * 2 * math.pi) -
+                        5,
+                    top: 115 +
+                        86 * math.sin(_ring.value * 2 * math.pi) -
+                        5,
+                    child: Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: accent
+                            .withValues(alpha: _iconOpacity.value * 0.75),
+                        boxShadow: [
+                          BoxShadow(
+                            color: accent.withValues(alpha: 0.55),
+                            blurRadius: 10,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  // Orbiting dot 2 — plus lent, grand rayon, déphasé
+                  Positioned(
+                    left: 115 +
+                        100 *
+                            math.cos(_ring.value * 2 * math.pi * 0.6 +
+                                math.pi * 0.9) -
+                        4,
+                    top: 115 +
+                        100 *
+                            math.sin(_ring.value * 2 * math.pi * 0.6 +
+                                math.pi * 0.9) -
+                        4,
+                    child: Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: accent
+                            .withValues(alpha: _iconOpacity.value * 0.45),
+                      ),
+                    ),
+                  ),
+                  // Orbiting dot 3 — sens inverse, petit, blanc
+                  Positioned(
+                    left: 115 +
+                        74 *
+                            math.cos(-_ring.value * 2 * math.pi * 1.2 +
+                                math.pi * 0.5) -
+                        3,
+                    top: 115 +
+                        74 *
+                            math.sin(-_ring.value * 2 * math.pi * 1.2 +
+                                math.pi * 0.5) -
+                        3,
+                    child: Container(
+                      width: 5,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white
+                            .withValues(alpha: _iconOpacity.value * 0.28),
+                      ),
+                    ),
+                  ),
+                  // Cercle intérieur + icône
+                  Container(
+                    width: 130,
+                    height: 130,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: accent.withValues(alpha: 0.13),
+                      border: Border.all(
+                        color: accent.withValues(alpha: 0.32),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Icon(widget.data.icon, size: 62, color: accent),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final accent = widget.data.accent;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(32, 20, 32, 16),
+      padding: const EdgeInsets.fromLTRB(32, 16, 32, 16),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // ── Zone icône animée ────────────────────────────────────────────
-          AnimatedBuilder(
-            animation: Listenable.merge([_enter, _float]),
-            builder: (_, _) => Transform.translate(
-              offset: Offset(0, _floatY.value),
-              child: Opacity(
-                opacity: _iconOpacity.value,
-                child: Transform.scale(
-                  scale: _iconScale.value,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      // Halo extérieur
-                      Transform.scale(
-                        scale: _glowScale.value,
-                        child: Container(
-                          width: 230,
-                          height: 230,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: RadialGradient(
-                              colors: [
-                                accent.withValues(alpha: 0.22),
-                                accent.withValues(alpha: 0.07),
-                                Colors.transparent,
-                              ],
-                              stops: const [0.0, 0.55, 1.0],
-                            ),
-                          ),
-                        ),
-                      ),
-                      // Cercle intérieur + icône
-                      Container(
-                        width: 130,
-                        height: 130,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: accent.withValues(alpha: 0.13),
-                          border: Border.all(
-                            color: accent.withValues(alpha: 0.32),
-                            width: 1.5,
-                          ),
-                        ),
-                        child: Icon(widget.data.icon, size: 62, color: accent),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+          // Zone icône ou grille showcase
+          if (widget.data.isShowcase)
+            _buildShowcaseGrid(accent)
+          else
+            _buildIconArea(accent),
+          SizedBox(height: widget.data.isShowcase ? 30 : 44),
+          // Tag chip
+          if (widget.data.tag.isNotEmpty) ...[
+            FadeTransition(
+              opacity: _titleFade,
+              child: _TagChip(text: widget.data.tag, accent: accent),
             ),
-          ),
-          const SizedBox(height: 52),
-          // ── Titre ────────────────────────────────────────────────────────
+            const SizedBox(height: 14),
+          ],
+          // Titre
           SlideTransition(
             position: _titleSlide,
             child: FadeTransition(
@@ -378,21 +654,53 @@ class _SlideCardState extends State<_SlideCard>
               ),
             ),
           ),
-          const SizedBox(height: 18),
-          // ── Corps ────────────────────────────────────────────────────────
-          FadeTransition(
-            opacity: _bodyFade,
-            child: Text(
-              widget.data.body,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.montserrat(
-                fontSize: 16,
-                color: Colors.white.withValues(alpha: 0.58),
-                height: 1.62,
+          const SizedBox(height: 16),
+          // Corps
+          SlideTransition(
+            position: _bodySlide,
+            child: FadeTransition(
+              opacity: _bodyFade,
+              child: Text(
+                widget.data.body,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.montserrat(
+                  fontSize: 15.5,
+                  color: Colors.white.withValues(alpha: 0.58),
+                  height: 1.65,
+                ),
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Tag chip ──────────────────────────────────────────────────────────────────
+
+class _TagChip extends StatelessWidget {
+  final String text;
+  final Color accent;
+  const _TagChip({required this.text, required this.accent});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: accent.withValues(alpha: 0.30), width: 1),
+      ),
+      child: Text(
+        text,
+        style: GoogleFonts.montserrat(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: accent,
+          letterSpacing: 0.2,
+        ),
       ),
     );
   }
@@ -437,7 +745,7 @@ class _InstallationPhaseState extends State<_InstallationPhase> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // ── Header ─────────────────────────────────────────────────────
+            // ── Header ───────────────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(28, 22, 28, 0),
               child: Column(
@@ -470,7 +778,7 @@ class _InstallationPhaseState extends State<_InstallationPhase> {
               ),
             ),
             const SizedBox(height: 18),
-            // ── Chips de partie ────────────────────────────────────────────
+            // ── Chips de partie ──────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Row(
@@ -483,7 +791,7 @@ class _InstallationPhaseState extends State<_InstallationPhase> {
               ),
             ),
             const SizedBox(height: 14),
-            // ── Titre de la partie + vidéo ─────────────────────────────────
+            // ── Titre + vidéo ────────────────────────────────────────────
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -512,7 +820,7 @@ class _InstallationPhaseState extends State<_InstallationPhase> {
                 ),
               ),
             ),
-            // ── Boutons bas ────────────────────────────────────────────────
+            // ── Boutons bas ──────────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(28, 16, 28, 30),
               child: Column(
@@ -707,8 +1015,8 @@ class _VideoCardState extends State<_VideoCard> {
                     color: widget.textPrim.withValues(alpha: 0.82),
                     shape: BoxShape.circle,
                   ),
-                  child:
-                      const Icon(Icons.play_arrow, color: Colors.white, size: 42),
+                  child: const Icon(Icons.play_arrow,
+                      color: Colors.white, size: 42),
                 ),
               ),
             Align(
@@ -733,7 +1041,6 @@ class _VideoCardState extends State<_VideoCard> {
 
 // ── Boutons ───────────────────────────────────────────────────────────────────
 
-/// Bouton phase Présentation (fond coloré avec glow).
 class _PresentButton extends StatefulWidget {
   final String label;
   final Color accent;
@@ -765,9 +1072,9 @@ class _PresentButtonState extends State<_PresentButton> {
             borderRadius: BorderRadius.circular(18),
             boxShadow: [
               BoxShadow(
-                color: widget.accent.withValues(alpha: 0.45),
-                blurRadius: 22,
-                offset: const Offset(0, 9),
+                color: widget.accent.withValues(alpha: 0.48),
+                blurRadius: 24,
+                offset: const Offset(0, 10),
               ),
             ],
           ),
@@ -784,7 +1091,6 @@ class _PresentButtonState extends State<_PresentButton> {
   }
 }
 
-/// Bouton phase Installation (fond sombre).
 class _InstallButton extends StatefulWidget {
   final String label;
   final VoidCallback onTap;

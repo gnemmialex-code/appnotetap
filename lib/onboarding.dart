@@ -726,11 +726,9 @@ class _InstallationPhase extends StatefulWidget {
   State<_InstallationPhase> createState() => _InstallationPhaseState();
 }
 
-class _InstallationPhaseState extends State<_InstallationPhase>
-    with WidgetsBindingObserver {
+class _InstallationPhaseState extends State<_InstallationPhase> {
   int _part = 0;
   Set<String> _assets = const {};
-  bool _waitingForTestReturn = false;
 
   static const _bg = Color(0xFFF5F5FA);
   static const _surface = Color(0xFFFFFFFF);
@@ -741,22 +739,12 @@ class _InstallationPhaseState extends State<_InstallationPhase>
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     _loadAssets();
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _waitingForTestReturn) {
-      _waitingForTestReturn = false;
-      widget.onDone();
-    }
   }
 
   Future<void> _loadAssets() async {
@@ -777,8 +765,7 @@ class _InstallationPhaseState extends State<_InstallationPhase>
       case 1:
         openAccessibilitySettings();
       case 2:
-        _waitingForTestReturn = true;
-        openShortcutsApp();
+        widget.onDone();
     }
   }
 

@@ -17,6 +17,7 @@
 // pour ne pas écraser ce que les intents ont écrit en arrière-plan.
 
 import AppIntents
+import PhotosUI
 import SwiftUI
 
 // MARK: - Pont de stockage vers shared_preferences (lib/store.dart)
@@ -116,15 +117,17 @@ enum ShortistNativeStore {
     saveList(todosKey, todos)
   }
 
-  static func addReading(text: String) {
+  static func addReading(text: String, imageB64: String? = nil) {
     var reading = loadList(readingKey)
-    reading.insert([
+    var item: [String: Any] = [
       "id": newId(),
       "createdAt": dartDateString(Date()),
       "text": text,
       "remindAt": NSNull(),
       "done": false,
-    ], at: 0)
+    ]
+    if let b64 = imageB64, !b64.isEmpty { item["imageB64"] = b64 }
+    reading.insert(item, at: 0)
     saveList(readingKey, reading)
   }
 
@@ -207,8 +210,13 @@ struct PanelView: View {
       HStack(spacing: 8) {
         actionTile(intent: AddPanelNoteIntent(), icon: "square.and.pencil", label: "Note")
         actionTile(intent: AddPanelTodoIntent(), icon: "checklist", label: "To-Do")
-        actionTile(intent: AddPanelReadingIntent(), icon: "bookmark", label: "À lire")
+        actionTile(intent: ShowReadingFormIntent(), icon: "bookmark", label: "À lire")
       }
+
+      Text("⚡ Note supprimée après 24h · À lire pour conserver")
+        .font(.system(size: 9.5))
+        .foregroundStyle(.secondary)
+        .multilineTextAlignment(.center)
 
       // « Dernières tâches » : coche directe, règle des 10 min côté store.
       if !todos.isEmpty {
@@ -275,7 +283,7 @@ struct AddPanelNoteIntent: AppIntent {
   static let title: LocalizedStringResource = "Ajouter une note"
   static let openAppWhenRun: Bool = false
 
-  @Parameter(title: "Note", requestValueDialog: "Quoi noter ?")
+  @Parameter(title: "Note", requestValueDialog: "Quoi noter ? (supprimé après 24h)")
   var text: String
 
   func perform() async throws -> some IntentResult {
@@ -309,6 +317,129 @@ struct AddPanelReadingIntent: AppIntent {
   func perform() async throws -> some IntentResult {
     ShortistNativeStore.addReading(text: text)
     return .result()
+  }
+}
+
+// MARK: - Formulaire « À lire » inline (iOS 26)
+
+@available(iOS 26.0, *)
+struct ShowReadingFormIntent: SnippetIntent {
+  static let title: LocalizedStringResource = "Formulaire À lire"
+
+  func perform() async throws -> some IntentResult & ShowsSnippetView {
+    // Efface le brouillon précédent avant d'afficher le formulaire.
+    UserDefaults.standard.removeObject(forKey: "qp_reading_draft")
+    UserDefaults.standard.removeObject(forKey: "qp_reading_image_data")
+    return .result(view: ReadingFormView())
+  }
+}
+
+@available(iOS 26.0, *)
+struct SaveReadingFromFormIntent: SnippetIntent {
+  static let title: LocalizedStringResource = "Enregistrer À lire"
+
+  func perform() async throws -> some IntentResult & ShowsSnippetView {
+    let text = UserDefaults.standard.string(forKey: "qp_reading_draft") ?? ""
+    let raw = UserDefaults.standard.data(forKey: "qp_reading_image_data") ?? Data()
+    let imageB64: String? = raw.isEmpty ? nil : raw.base64EncodedString()
+    ShortistNativeStore.addReading(text: text, imageB64: imageB64)
+    UserDefaults.standard.removeObject(forKey: "qp_reading_draft")
+    UserDefaults.standard.removeObject(forKey: "qp_reading_image_data")
+    let todos = ShortistNativeStore.quickPanelTodos()
+    return .result(view: PanelView(todos: todos))
+  }
+}
+
+@available(iOS 26.0, *)
+struct CancelReadingFormIntent: SnippetIntent {
+  static let title: LocalizedStringResource = "Annuler"
+
+  func perform() async throws -> some IntentResult & ShowsSnippetView {
+    UserDefaults.standard.removeObject(forKey: "qp_reading_draft")
+    UserDefaults.standard.removeObject(forKey: "qp_reading_image_data")
+    let todos = ShortistNativeStore.quickPanelTodos()
+    return .result(view: PanelView(todos: todos))
+  }
+}
+
+@available(iOS 26.0, *)
+struct ReadingFormView: View {
+  @AppStorage("qp_reading_draft") private var text = ""
+  @AppStorage("qp_reading_image_data") private var imageData: Data = Data()
+  @State private var selectedItem: PhotosPickerItem?
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      Text("À lire plus tard")
+        .font(.system(size: 15, weight: .heavy))
+        .frame(maxWidth: .infinity, alignment: .center)
+
+      TextField("Lien ou texte à retenir…", text: $text, axis: .vertical)
+        .lineLimit(3, reservesSpace: false)
+        .textFieldStyle(.roundedBorder)
+        .font(.system(size: 14))
+
+      PhotosPicker(selection: $selectedItem, matching: .images) {
+        HStack(spacing: 6) {
+          Image(systemName: imageData.isEmpty ? "photo.badge.plus" : "photo.fill")
+            .foregroundStyle(imageData.isEmpty ? .secondary : .blue)
+          Text(imageData.isEmpty ? "Ajouter une image" : "Image sélectionnée ✓")
+            .font(.system(size: 13))
+            .foregroundStyle(imageData.isEmpty ? .secondary : .blue)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
+      }
+      .onChange(of: selectedItem) { _, item in
+        Task {
+          guard let item else { return }
+          guard let raw = try? await item.loadTransferable(type: Data.self),
+                !raw.isEmpty else { return }
+          // Redimensionne à 800 px max, qualité 75 % pour éviter un JSON trop lourd.
+          if let ui = UIImage(data: raw) {
+            let scale = min(800 / ui.size.width, 800 / ui.size.height, 1)
+            let newSize = CGSize(width: ui.size.width * scale, height: ui.size.height * scale)
+            let renderer = UIGraphicsImageRenderer(size: newSize)
+            let resized = renderer.image { _ in ui.draw(in: CGRect(origin: .zero, size: newSize)) }
+            imageData = resized.jpegData(compressionQuality: 0.75) ?? raw
+          } else {
+            imageData = raw
+          }
+        }
+      }
+
+      if !imageData.isEmpty, let ui = UIImage(data: imageData) {
+        Image(uiImage: ui)
+          .resizable()
+          .scaledToFill()
+          .frame(maxWidth: .infinity, maxHeight: 80)
+          .clipShape(RoundedRectangle(cornerRadius: 8))
+          .clipped()
+      }
+
+      HStack(spacing: 8) {
+        Button(intent: CancelReadingFormIntent()) {
+          Text("Annuler")
+            .font(.system(size: 14, weight: .medium))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
+        }
+        .buttonStyle(.plain)
+
+        Button(intent: SaveReadingFromFormIntent()) {
+          Text("Enregistrer")
+            .font(.system(size: 14, weight: .semibold))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+        }
+        .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)
+        .buttonStyle(.borderedProminent)
+        .tint(.black)
+      }
+    }
+    .padding()
   }
 }
 

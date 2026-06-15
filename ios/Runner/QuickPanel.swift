@@ -382,7 +382,7 @@ struct ReadingFormView: View {
       PhotosPicker(selection: $selectedItem, matching: .images) {
         HStack(spacing: 6) {
           Image(systemName: imageData.isEmpty ? "photo.badge.plus" : "photo.fill")
-            .foregroundStyle(imageData.isEmpty ? .secondary : .blue)
+            .foregroundStyle(imageData.isEmpty ? .secondary : Color.blue)
           Text(imageData.isEmpty ? "Ajouter une image" : "Image sélectionnée ✓")
             .font(.system(size: 13))
             .foregroundStyle(imageData.isEmpty ? .secondary : .blue)

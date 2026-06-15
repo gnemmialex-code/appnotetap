@@ -1,15 +1,8 @@
-// Onboarding — « avant-page » affichée à la première ouverture, avant
-// d'accéder à l'application.
+// Onboarding en 2 phases :
+//   1. Présentation de l'app (4 slides animés, design sombre)
+//   2. Installation (3 vidéos : raccourcis, paramètres, test)
 //
-// Deux modes, au choix de l'utilisateur (bascule en haut de l'écran) :
-//  • Images : tutoriel détaillé en 9 pages (captures dans
-//    assets/onboarding/etape_1.png … etape_9.png).
-//  • Vidéo  : tutoriel en 3 parties — Installation sur Raccourcis,
-//    Installation sur Paramètres, Test (assets/onboarding/videos/*.mp4).
-//
-// La dernière page propose « Configurer maintenant » (ouvre les Réglages
-// d'accessibilité iOS) ou « Passer pour l'instant » ; les deux mènent à
-// l'app et ne remontrent plus jamais cette avant-page.
+// L'ensemble ne s'affiche qu'une seule fois (flag backTapSetupDone).
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show AssetManifest, rootBundle;
@@ -19,83 +12,53 @@ import 'package:video_player/video_player.dart';
 import 'bridge.dart';
 import 'store.dart';
 
-const _bg       = Color(0xFFF5F5FA);
-const _surface  = Color(0xFFFFFFFF);
-const _textPrim = Color(0xFF1C1C2E);
-const _textSec  = Color(0xFF888898);
-const _border   = Color(0xFFEAEAF2);
-const _accent   = Color(0xFF1C1C2E);
+// ── Data ─────────────────────────────────────────────────────────────────────
 
-// ── Contenu du tutoriel ─────────────────────────────────────────────────────
-
-class _TutoPage {
+class _SlideData {
   final IconData icon;
   final String title;
-  final String text;
-  const _TutoPage(this.icon, this.title, this.text);
-
-  /// Capture associée : assets/onboarding/etape_1.png … etape_9.png.
-  String assetFor(int index) => 'assets/onboarding/etape_${index + 1}.png';
+  final String body;
+  final Color accent;
+  const _SlideData(this.icon, this.title, this.body, this.accent);
 }
 
-const _pages = <_TutoPage>[
-  _TutoPage(
-    Icons.touch_app_outlined,
-    'Bienvenue sur Shortist',
-    'Capture une note, une tâche ou un lien en 2 secondes, depuis n\'importe quelle app, d\'un simple double-tap au dos de ton iPhone.',
+const _slides = <_SlideData>[
+  _SlideData(
+    Icons.touch_app_rounded,
+    'Capturez en 2 secondes',
+    'Un double-tap au dos de votre iPhone — le panneau Shortist apparaît par-dessus n\'importe quel écran.',
+    Color(0xFF7C5CBF),
   ),
-  _TutoPage(
-    Icons.dashboard_customize_outlined,
-    'Le panneau rapide',
-    'Le panneau s\'affiche par-dessus l\'écran en cours : Note, To-Do, À lire et tes dernières tâches à cocher — sans ouvrir l\'application.',
+  _SlideData(
+    Icons.flash_on_rounded,
+    'Notes & To-Do instantanés',
+    'Ajoutez une note rapide, cochez une tâche ou sauvegardez un lien — sans quitter votre application.',
+    Color(0xFF00A876),
   ),
-  _TutoPage(
-    Icons.app_shortcut_outlined,
-    'Ouvre l\'app Raccourcis',
-    'Sur ton iPhone, ouvre l\'application « Raccourcis » (préinstallée par Apple). C\'est elle qui relie Shortist au double-tap.',
+  _SlideData(
+    Icons.event_note_rounded,
+    'Agenda synchronisé',
+    'Consultez et créez des événements directement dans votre Calendrier iPhone, depuis Shortist.',
+    Color(0xFF1A86CF),
   ),
-  _TutoPage(
-    Icons.add_circle_outline,
-    'Ajoute le raccourci Shortist',
-    'Dans l\'onglet Raccourcis, touche « + » puis cherche « Shortist ». Choisis l\'action « Ouvrir le panneau » et valide : le raccourci est créé.',
-  ),
-  _TutoPage(
-    Icons.settings_outlined,
-    'Ouvre les Réglages iOS',
-    'Va maintenant dans Réglages → Accessibilité → Toucher.',
-  ),
-  _TutoPage(
-    Icons.back_hand_outlined,
-    '« Toucher le dos »',
-    'Tout en bas de la page Toucher, ouvre « Toucher le dos » (Back Tap).',
-  ),
-  _TutoPage(
-    Icons.touch_app,
-    'Choisis « Toucher deux fois »',
-    'Sélectionne « Toucher deux fois », puis dans la liste des raccourcis, choisis « Shortist ».',
-  ),
-  _TutoPage(
-    Icons.play_circle_outline,
-    'Teste ton installation',
-    'Double-tape le dos de ton iPhone : le panneau Shortist apparaît par-dessus n\'importe quel écran. 🎉',
-  ),
-  _TutoPage(
-    Icons.check_circle_outline,
-    'C\'est prêt !',
-    'Note, To-Do, À lire, Agenda, Carnet… tout est capturé instantanément et se retrouve dans l\'app. Bonne capture !',
+  _SlideData(
+    Icons.bookmark_add_rounded,
+    'Rien ne se perd',
+    'Liens, images, idées — tout est capturé, organisé et consultable en un instant avec rappels.',
+    Color(0xFFE06542),
   ),
 ];
 
-/// Les 3 parties du tutoriel vidéo : (titre, fichier, icône).
 const _videoParts = <(String, String, IconData)>[
   ('Installation sur Raccourcis', 'assets/onboarding/videos/raccourcis.mp4',
       Icons.app_shortcut_outlined),
   ('Installation sur Paramètres', 'assets/onboarding/videos/parametres.mp4',
       Icons.settings_outlined),
-  ('Test', 'assets/onboarding/videos/test.mp4', Icons.play_circle_outline),
+  ('Test du double-tap', 'assets/onboarding/videos/test.mp4',
+      Icons.play_circle_outline),
 ];
 
-// ── Écran principal ─────────────────────────────────────────────────────────
+// ── OnboardingScreen ──────────────────────────────────────────────────────────
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -104,32 +67,9 @@ class OnboardingScreen extends StatefulWidget {
 }
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
-  final PageController _pageCtrl = PageController();
-  int _page = 0;
-  bool _videoMode = false; // false = Images, true = Vidéo
-  int _videoPart = 0;
-  Set<String> _assets = const {};
+  bool _showInstallation = false;
 
-  bool get _lastPage => _page == _pages.length - 1;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadManifest();
-  }
-
-  /// Liste les assets réellement embarqués pour savoir quelles captures /
-  /// vidéos existent (les manquantes affichent un emplacement par défaut).
-  Future<void> _loadManifest() async {
-    final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
-    if (mounted) setState(() => _assets = manifest.listAssets().toSet());
-  }
-
-  @override
-  void dispose() {
-    _pageCtrl.dispose();
-    super.dispose();
-  }
+  void _goToInstallation() => setState(() => _showInstallation = true);
 
   Future<void> _finish({required bool configure}) async {
     await store.markBackTapSetupDone();
@@ -139,233 +79,494 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 480),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, anim) => SlideTransition(
+        position: Tween<Offset>(
+                begin: const Offset(1, 0), end: Offset.zero)
+            .animate(anim),
+        child: child,
+      ),
+      child: _showInstallation
+          ? _InstallationPhase(
+              key: const ValueKey('install'), onFinish: _finish)
+          : _PresentationPhase(
+              key: const ValueKey('present'), onNext: _goToInstallation),
+    );
+  }
+}
+
+// ── Phase 1 : Présentation ────────────────────────────────────────────────────
+
+class _PresentationPhase extends StatefulWidget {
+  final VoidCallback onNext;
+  const _PresentationPhase({super.key, required this.onNext});
+  @override
+  State<_PresentationPhase> createState() => _PresentationPhaseState();
+}
+
+class _PresentationPhaseState extends State<_PresentationPhase> {
+  final PageController _pageCtrl = PageController();
+  int _page = 0;
+
+  bool get _isLast => _page == _slides.length - 1;
+
+  @override
+  void dispose() {
+    _pageCtrl.dispose();
+    super.dispose();
+  }
+
+  void _next() {
+    if (_isLast) {
+      widget.onNext();
+    } else {
+      _pageCtrl.nextPage(
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeOutCubic);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = _slides[_page].accent;
+    return Scaffold(
+      backgroundColor: const Color(0xFF0D0D18),
+      body: SafeArea(
+        child: Column(
+          children: [
+            // ── Top bar ────────────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 14, 12, 0),
+              child: Row(
+                children: [
+                  Text('Shortist',
+                      style: GoogleFonts.montserrat(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white)),
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: widget.onNext,
+                    child: Padding(
+                      padding: const EdgeInsets.all(10),
+                      child: Row(
+                        children: [
+                          Text('Installer',
+                              style: GoogleFonts.montserrat(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white38)),
+                          const SizedBox(width: 4),
+                          const Icon(Icons.arrow_forward_ios,
+                              size: 12, color: Colors.white24),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // ── Slides ─────────────────────────────────────────────────────
+            Expanded(
+              child: PageView.builder(
+                controller: _pageCtrl,
+                itemCount: _slides.length,
+                onPageChanged: (i) => setState(() => _page = i),
+                itemBuilder: (context, i) => _SlideCard(
+                  key: ValueKey(i),
+                  data: _slides[i],
+                  isActive: i == _page,
+                ),
+              ),
+            ),
+            // ── Dots ───────────────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.only(bottom: 22),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  for (int i = 0; i < _slides.length; i++)
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 280),
+                      curve: Curves.easeInOut,
+                      width: i == _page ? 22 : 7,
+                      height: 7,
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
+                      decoration: BoxDecoration(
+                        color: i == _page ? accent : Colors.white.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            // ── Bouton ─────────────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(28, 0, 28, 32),
+              child: _PresentButton(
+                label: _isLast ? 'Installer Shortist' : 'Suivant',
+                accent: accent,
+                onTap: _next,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Slide animé ───────────────────────────────────────────────────────────────
+
+class _SlideCard extends StatefulWidget {
+  final _SlideData data;
+  final bool isActive;
+  const _SlideCard({super.key, required this.data, required this.isActive});
+  @override
+  State<_SlideCard> createState() => _SlideCardState();
+}
+
+class _SlideCardState extends State<_SlideCard>
+    with TickerProviderStateMixin {
+  // Entrée : déclenché quand isActive passe à true
+  late final AnimationController _enter = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 780),
+  );
+  // Flottement continu de l'icône
+  late final AnimationController _float = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 2800),
+  )..repeat(reverse: true);
+
+  // ── Animations d'entrée ──────────────────────────────────────────────────
+  late final Animation<double> _iconScale = Tween(begin: 0.0, end: 1.0)
+      .animate(CurvedAnimation(
+          parent: _enter,
+          curve:
+              const Interval(0.0, 0.65, curve: Curves.elasticOut)));
+
+  late final Animation<double> _iconOpacity = Tween(begin: 0.0, end: 1.0)
+      .animate(CurvedAnimation(
+          parent: _enter,
+          curve: const Interval(0.0, 0.35, curve: Curves.easeOut)));
+
+  late final Animation<double> _glowScale = Tween(begin: 0.2, end: 1.0)
+      .animate(CurvedAnimation(
+          parent: _enter,
+          curve: const Interval(0.0, 0.7, curve: Curves.easeOut)));
+
+  late final Animation<Offset> _titleSlide =
+      Tween<Offset>(begin: const Offset(0, 0.35), end: Offset.zero).animate(
+          CurvedAnimation(
+              parent: _enter,
+              curve: const Interval(0.22, 0.75,
+                  curve: Curves.easeOutCubic)));
+
+  late final Animation<double> _titleFade = Tween(begin: 0.0, end: 1.0)
+      .animate(CurvedAnimation(
+          parent: _enter,
+          curve: const Interval(0.22, 0.65, curve: Curves.easeOut)));
+
+  late final Animation<double> _bodyFade = Tween(begin: 0.0, end: 1.0)
+      .animate(CurvedAnimation(
+          parent: _enter,
+          curve: const Interval(0.44, 0.9, curve: Curves.easeOut)));
+
+  // ── Flottement ───────────────────────────────────────────────────────────
+  late final Animation<double> _floatY = Tween(begin: -10.0, end: 10.0)
+      .animate(CurvedAnimation(parent: _float, curve: Curves.easeInOut));
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.isActive) _enter.forward();
+  }
+
+  @override
+  void didUpdateWidget(_SlideCard old) {
+    super.didUpdateWidget(old);
+    if (widget.isActive && !old.isActive) {
+      _enter.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _enter.dispose();
+    _float.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = widget.data.accent;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(32, 20, 32, 16),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // ── Zone icône animée ────────────────────────────────────────────
+          AnimatedBuilder(
+            animation: Listenable.merge([_enter, _float]),
+            builder: (_, _) => Transform.translate(
+              offset: Offset(0, _floatY.value),
+              child: Opacity(
+                opacity: _iconOpacity.value,
+                child: Transform.scale(
+                  scale: _iconScale.value,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      // Halo extérieur
+                      Transform.scale(
+                        scale: _glowScale.value,
+                        child: Container(
+                          width: 230,
+                          height: 230,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: RadialGradient(
+                              colors: [
+                                accent.withValues(alpha: 0.22),
+                                accent.withValues(alpha: 0.07),
+                                Colors.transparent,
+                              ],
+                              stops: const [0.0, 0.55, 1.0],
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Cercle intérieur + icône
+                      Container(
+                        width: 130,
+                        height: 130,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: accent.withValues(alpha: 0.13),
+                          border: Border.all(
+                            color: accent.withValues(alpha: 0.32),
+                            width: 1.5,
+                          ),
+                        ),
+                        child: Icon(widget.data.icon, size: 62, color: accent),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 52),
+          // ── Titre ────────────────────────────────────────────────────────
+          SlideTransition(
+            position: _titleSlide,
+            child: FadeTransition(
+              opacity: _titleFade,
+              child: Text(
+                widget.data.title,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.montserrat(
+                  fontSize: 30,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                  height: 1.15,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          // ── Corps ────────────────────────────────────────────────────────
+          FadeTransition(
+            opacity: _bodyFade,
+            child: Text(
+              widget.data.body,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.montserrat(
+                fontSize: 16,
+                color: Colors.white.withValues(alpha: 0.58),
+                height: 1.62,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Phase 2 : Installation ────────────────────────────────────────────────────
+
+class _InstallationPhase extends StatefulWidget {
+  final void Function({required bool configure}) onFinish;
+  const _InstallationPhase({super.key, required this.onFinish});
+  @override
+  State<_InstallationPhase> createState() => _InstallationPhaseState();
+}
+
+class _InstallationPhaseState extends State<_InstallationPhase> {
+  int _part = 0;
+  Set<String> _assets = const {};
+
+  static const _bg = Color(0xFFF5F5FA);
+  static const _surface = Color(0xFFFFFFFF);
+  static const _textPrim = Color(0xFF1C1C2E);
+  static const _textSec = Color(0xFF888898);
+  static const _border = Color(0xFFEAEAF2);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAssets();
+  }
+
+  Future<void> _loadAssets() async {
+    final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
+    if (mounted) setState(() => _assets = manifest.listAssets().toSet());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final (title, asset, icon) = _videoParts[_part];
     return Scaffold(
       backgroundColor: _bg,
       body: SafeArea(
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // ── Header ─────────────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(28, 22, 28, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: _textPrim.withValues(alpha: 0.07),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text('Installation · ~3 min',
+                        style: GoogleFonts.montserrat(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: _textSec)),
+                  ),
+                  const SizedBox(height: 8),
+                  Text('Mise en place',
+                      style: GoogleFonts.montserrat(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w800,
+                          color: _textPrim)),
+                  const SizedBox(height: 4),
+                  Text('Regarde les 3 vidéos pour activer le double-tap.',
+                      style: GoogleFonts.montserrat(
+                          fontSize: 14, color: _textSec, height: 1.4)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
+            // ── Chips de partie ────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Row(
+                children: [
+                  for (int i = 0; i < _videoParts.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 8),
+                    Expanded(child: _partChip(i)),
+                  ],
+                ],
+              ),
+            ),
             const SizedBox(height: 14),
-            _modeSwitch(),
-            const SizedBox(height: 10),
-            Expanded(child: _videoMode ? _videoSection() : _imageSection()),
-            _bottomBar(),
+            // ── Titre de la partie + vidéo ─────────────────────────────────
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: GoogleFonts.montserrat(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                            color: _textPrim)),
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: _VideoCard(
+                        key: ValueKey(asset),
+                        asset: asset,
+                        exists: _assets.contains(asset),
+                        placeholderIcon: icon,
+                        surface: _surface,
+                        border: _border,
+                        textSec: _textSec,
+                        textPrim: _textPrim,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // ── Boutons bas ────────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(28, 16, 28, 30),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _InstallButton(
+                    label: 'Configurer maintenant',
+                    onTap: () => widget.onFinish(configure: true),
+                  ),
+                  const SizedBox(height: 10),
+                  GestureDetector(
+                    onTap: () => widget.onFinish(configure: false),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text(
+                        'Passer pour l\'instant',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.montserrat(
+                            color: _textSec,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  // ── Bascule Images / Vidéo ────────────────────────────────────────────────
-
-  Widget _modeSwitch() {
-    Widget seg(String label, IconData icon, bool selected, VoidCallback onTap) {
-      return Expanded(
-        child: GestureDetector(
-          onTap: onTap,
-          child: Container(
-            margin: const EdgeInsets.all(3),
-            padding: const EdgeInsets.symmetric(vertical: 11),
-            decoration: BoxDecoration(
-              color: selected ? _accent : Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, size: 18,
-                    color: selected ? Colors.white : _textSec),
-                const SizedBox(width: 7),
-                Text(label,
-                    style: GoogleFonts.montserrat(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: selected ? Colors.white : _textSec)),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 24),
-      decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: _border),
-      ),
-      child: Row(
-        children: [
-          seg('Images', Icons.photo_library_outlined, !_videoMode,
-              () => setState(() => _videoMode = false)),
-          seg('Vidéo', Icons.play_circle_outline, _videoMode,
-              () => setState(() => _videoMode = true)),
-        ],
-      ),
-    );
-  }
-
-  // ── Mode Images : 9 pages ────────────────────────────────────────────────
-
-  Widget _imageSection() {
-    return Column(
-      children: [
-        Expanded(
-          child: PageView.builder(
-            controller: _pageCtrl,
-            itemCount: _pages.length,
-            onPageChanged: (i) => setState(() => _page = i),
-            itemBuilder: (context, i) => _tutoPageView(_pages[i], i),
-          ),
-        ),
-        const SizedBox(height: 10),
-        _dots(),
-      ],
-    );
-  }
-
-  Widget _tutoPageView(_TutoPage p, int index) {
-    final asset = p.assetFor(index);
-    final hasImage = _assets.contains(asset);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 28),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SizedBox(height: 6),
-          // Illustration : la capture si elle existe, sinon une grande icône.
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: _surface,
-                borderRadius: BorderRadius.circular(22),
-                border: Border.all(color: _border),
-                boxShadow: [
-                  BoxShadow(
-                    color: _textPrim.withValues(alpha: 0.06),
-                    blurRadius: 14,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: hasImage
-                  ? Image.asset(asset, fit: BoxFit.contain)
-                  : Center(
-                      child: Icon(p.icon, size: 84,
-                          color: _textPrim.withValues(alpha: 0.18)),
-                    ),
-            ),
-          ),
-          const SizedBox(height: 22),
-          Text('Étape ${index + 1} sur ${_pages.length}',
-              style: GoogleFonts.montserrat(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: _textSec,
-                  letterSpacing: 0.4)),
-          const SizedBox(height: 8),
-          Text(p.title,
-              style: GoogleFonts.montserrat(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w800,
-                  color: _textPrim,
-                  height: 1.2)),
-          const SizedBox(height: 10),
-          Text(p.text,
-              style: GoogleFonts.montserrat(
-                  fontSize: 16, color: _textSec, height: 1.55)),
-          const SizedBox(height: 6),
-        ],
-      ),
-    );
-  }
-
-  Widget _dots() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        for (int i = 0; i < _pages.length; i++)
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            width: i == _page ? 20 : 7,
-            height: 7,
-            margin: const EdgeInsets.symmetric(horizontal: 3),
-            decoration: BoxDecoration(
-              color: i == _page ? _accent : _border,
-              borderRadius: BorderRadius.circular(4),
-            ),
-          ),
-      ],
-    );
-  }
-
-  // ── Mode Vidéo : 3 parties ───────────────────────────────────────────────
-
-  Widget _videoSection() {
-    final (title, asset, icon) = _videoParts[_videoPart];
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SizedBox(height: 6),
-          // Sélecteur de partie (1/2/3).
-          Row(
-            children: [
-              for (int i = 0; i < _videoParts.length; i++) ...[
-                if (i > 0) const SizedBox(width: 8),
-                Expanded(child: _partChip(i)),
-              ],
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(title,
-              style: GoogleFonts.montserrat(
-                  fontSize: 21,
-                  fontWeight: FontWeight.w800,
-                  color: _textPrim)),
-          const SizedBox(height: 4),
-          Text('Partie ${_videoPart + 1} sur ${_videoParts.length}',
-              style: GoogleFonts.montserrat(fontSize: 13, color: _textSec)),
-          const SizedBox(height: 14),
-          Expanded(
-            child: _VideoCard(
-              // La clé force un nouveau lecteur (et libère l'ancien)
-              // à chaque changement de partie.
-              key: ValueKey(asset),
-              asset: asset,
-              exists: _assets.contains(asset),
-              placeholderIcon: icon,
-            ),
-          ),
-          const SizedBox(height: 10),
-        ],
-      ),
-    );
-  }
-
   Widget _partChip(int i) {
-    final selected = i == _videoPart;
-    final (_, _, icon) = _videoParts[i];
-    // Libellé court pour les puces (le titre complet est affiché au-dessus).
+    final selected = i == _part;
+    final icon = _videoParts[i].$3;
     final short = switch (i) {
       0 => 'Raccourcis',
       1 => 'Paramètres',
       _ => 'Test',
     };
     return GestureDetector(
-      onTap: () => setState(() => _videoPart = i),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 11),
+      onTap: () => setState(() => _part = i),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          color: selected ? _accent : _surface,
+          color: selected ? _textPrim : _surface,
           borderRadius: BorderRadius.circular(13),
-          border: Border.all(color: selected ? _accent : _border),
+          border: Border.all(color: selected ? _textPrim : _border),
         ),
         child: Column(
           children: [
-            Icon(icon, size: 20, color: selected ? Colors.white : _textSec),
+            Icon(icon, size: 18, color: selected ? Colors.white : _textSec),
             const SizedBox(height: 4),
             Text(short,
                 maxLines: 1,
@@ -379,64 +580,28 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       ),
     );
   }
-
-  // ── Barre du bas : Suivant / Configurer / Passer ─────────────────────────
-
-  Widget _bottomBar() {
-    final showConfigure = _videoMode || _lastPage;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(28, 14, 28, 26),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _PrimaryButton(
-            label: showConfigure ? 'Configurer maintenant' : 'Suivant',
-            trailingIcon: showConfigure
-                ? Icons.arrow_forward_ios
-                : Icons.arrow_forward,
-            onTap: () {
-              if (showConfigure) {
-                _finish(configure: true);
-              } else {
-                _pageCtrl.nextPage(
-                    duration: const Duration(milliseconds: 280),
-                    curve: Curves.easeOutCubic);
-              }
-            },
-          ),
-          const SizedBox(height: 10),
-          GestureDetector(
-            onTap: () => _finish(configure: false),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Text(
-                'Passer pour l\'instant',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.montserrat(
-                    color: _textSec,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
-// ── Lecteur vidéo d'une partie du tutoriel ──────────────────────────────────
+// ── Lecteur vidéo ─────────────────────────────────────────────────────────────
 
 class _VideoCard extends StatefulWidget {
   final String asset;
   final bool exists;
   final IconData placeholderIcon;
-  const _VideoCard(
-      {super.key,
-      required this.asset,
-      required this.exists,
-      required this.placeholderIcon});
-
+  final Color surface;
+  final Color border;
+  final Color textSec;
+  final Color textPrim;
+  const _VideoCard({
+    super.key,
+    required this.asset,
+    required this.exists,
+    required this.placeholderIcon,
+    required this.surface,
+    required this.border,
+    required this.textSec,
+    required this.textPrim,
+  });
   @override
   State<_VideoCard> createState() => _VideoCardState();
 }
@@ -472,12 +637,12 @@ class _VideoCardState extends State<_VideoCard> {
   @override
   Widget build(BuildContext context) {
     final box = BoxDecoration(
-      color: _surface,
+      color: widget.surface,
       borderRadius: BorderRadius.circular(22),
-      border: Border.all(color: _border),
+      border: Border.all(color: widget.border),
       boxShadow: [
         BoxShadow(
-          color: _textPrim.withValues(alpha: 0.06),
+          color: widget.textPrim.withValues(alpha: 0.06),
           blurRadius: 14,
           offset: const Offset(0, 4),
         ),
@@ -485,7 +650,6 @@ class _VideoCardState extends State<_VideoCard> {
     );
 
     if (!widget.exists) {
-      // Emplacement vide : la vidéo n'a pas encore été déposée dans assets/.
       return Container(
         decoration: box,
         padding: const EdgeInsets.all(24),
@@ -493,13 +657,13 @@ class _VideoCardState extends State<_VideoCard> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(widget.placeholderIcon,
-                size: 64, color: _textPrim.withValues(alpha: 0.18)),
+                size: 64, color: widget.textPrim.withValues(alpha: 0.18)),
             const SizedBox(height: 16),
             Text(
               'Vidéo à venir.\n\nDépose le fichier\n${widget.asset.split('/').last}\ndans assets/onboarding/videos/.',
               textAlign: TextAlign.center,
               style: GoogleFonts.montserrat(
-                  fontSize: 13, color: _textSec, height: 1.6),
+                  fontSize: 13, color: widget.textSec, height: 1.6),
             ),
           ],
         ),
@@ -511,7 +675,9 @@ class _VideoCardState extends State<_VideoCard> {
       return Container(
         decoration: box,
         alignment: Alignment.center,
-        child: const CircularProgressIndicator(strokeWidth: 2.5),
+        child: CircularProgressIndicator(
+            strokeWidth: 2.5,
+            color: widget.textPrim.withValues(alpha: 0.4)),
       );
     }
 
@@ -532,21 +698,19 @@ class _VideoCardState extends State<_VideoCard> {
                 child: VideoPlayer(c),
               ),
             ),
-            // Bouton lecture quand la vidéo est en pause.
             if (!c.value.isPlaying)
               Center(
                 child: Container(
                   width: 72,
                   height: 72,
                   decoration: BoxDecoration(
-                    color: _accent.withValues(alpha: 0.85),
+                    color: widget.textPrim.withValues(alpha: 0.82),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.play_arrow,
-                      color: Colors.white, size: 42),
+                  child:
+                      const Icon(Icons.play_arrow, color: Colors.white, size: 42),
                 ),
               ),
-            // Barre de progression en bas de la carte.
             Align(
               alignment: Alignment.bottomCenter,
               child: VideoProgressIndicator(
@@ -567,22 +731,21 @@ class _VideoCardState extends State<_VideoCard> {
   }
 }
 
-// ── Bouton principal réutilisable ───────────────────────────────────────────
+// ── Boutons ───────────────────────────────────────────────────────────────────
 
-class _PrimaryButton extends StatefulWidget {
+/// Bouton phase Présentation (fond coloré avec glow).
+class _PresentButton extends StatefulWidget {
   final String label;
-  final IconData trailingIcon;
+  final Color accent;
   final VoidCallback onTap;
-  const _PrimaryButton(
-      {required this.label, required this.trailingIcon, required this.onTap});
-
+  const _PresentButton(
+      {required this.label, required this.accent, required this.onTap});
   @override
-  State<_PrimaryButton> createState() => _PrimaryButtonState();
+  State<_PresentButton> createState() => _PresentButtonState();
 }
 
-class _PrimaryButtonState extends State<_PrimaryButton> {
+class _PresentButtonState extends State<_PresentButton> {
   double _scale = 1.0;
-
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -592,15 +755,65 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
       onTap: widget.onTap,
       child: AnimatedScale(
         scale: _scale,
-        duration: const Duration(milliseconds: 100),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 17),
+        duration: const Duration(milliseconds: 110),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          height: 60,
+          alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: _accent,
+            color: widget.accent,
             borderRadius: BorderRadius.circular(18),
             boxShadow: [
               BoxShadow(
-                color: _accent.withValues(alpha: 0.25),
+                color: widget.accent.withValues(alpha: 0.45),
+                blurRadius: 22,
+                offset: const Offset(0, 9),
+              ),
+            ],
+          ),
+          child: Text(
+            widget.label,
+            style: GoogleFonts.montserrat(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 16),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Bouton phase Installation (fond sombre).
+class _InstallButton extends StatefulWidget {
+  final String label;
+  final VoidCallback onTap;
+  const _InstallButton({required this.label, required this.onTap});
+  @override
+  State<_InstallButton> createState() => _InstallButtonState();
+}
+
+class _InstallButtonState extends State<_InstallButton> {
+  double _scale = 1.0;
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _scale = 0.96),
+      onTapUp: (_) => setState(() => _scale = 1.0),
+      onTapCancel: () => setState(() => _scale = 1.0),
+      onTap: widget.onTap,
+      child: AnimatedScale(
+        scale: _scale,
+        duration: const Duration(milliseconds: 110),
+        child: Container(
+          height: 60,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: const Color(0xFF1C1C2E),
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF1C1C2E).withValues(alpha: 0.26),
                 blurRadius: 16,
                 offset: const Offset(0, 6),
               ),
@@ -614,8 +827,9 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
                       color: Colors.white,
                       fontWeight: FontWeight.w700,
                       fontSize: 16)),
-              const SizedBox(width: 7),
-              Icon(widget.trailingIcon, size: 14, color: Colors.white),
+              const SizedBox(width: 8),
+              const Icon(Icons.arrow_forward_ios,
+                  size: 13, color: Colors.white70),
             ],
           ),
         ),

@@ -923,23 +923,56 @@ class _VideoCardState extends State<_VideoCard> {
     if (widget.exists) {
       final c = VideoPlayerController.asset(widget.asset);
       _ctrl = c;
-      c.initialize().then((_) {
-        if (mounted) setState(() {});
-      });
+      c.addListener(_onVideoUpdate);
       c.setLooping(true);
+      c.initialize().then((_) {
+        if (mounted) {
+          setState(() {});
+          c.play();
+        }
+      });
     }
   }
 
   @override
   void dispose() {
+    _ctrl?.removeListener(_onVideoUpdate);
     _ctrl?.dispose();
     super.dispose();
+  }
+
+  void _onVideoUpdate() {
+    if (mounted) setState(() {});
   }
 
   void _togglePlay() {
     final c = _ctrl;
     if (c == null || !c.value.isInitialized) return;
-    setState(() => c.value.isPlaying ? c.pause() : c.play());
+    c.value.isPlaying ? c.pause() : c.play();
+  }
+
+  void _rewind5() {
+    final c = _ctrl;
+    if (c == null || !c.value.isInitialized) return;
+    final target = c.value.position - const Duration(seconds: 5);
+    c.seekTo(target < Duration.zero ? Duration.zero : target);
+  }
+
+  Widget _controlBtn(IconData icon, VoidCallback onTap, {bool large = false}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: large ? 48 : 38,
+        height: large ? 48 : 38,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.white.withValues(alpha: 0.20),
+          border:
+              Border.all(color: Colors.white.withValues(alpha: 0.30), width: 1),
+        ),
+        child: Icon(icon, color: Colors.white, size: large ? 26 : 20),
+      ),
+    );
   }
 
   @override
@@ -989,51 +1022,70 @@ class _VideoCardState extends State<_VideoCard> {
       );
     }
 
-    return GestureDetector(
-      onTap: _togglePlay,
-      child: Container(
-        decoration: box,
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
-          alignment: Alignment.center,
-          fit: StackFit.expand,
-          children: [
-            FittedBox(
-              fit: BoxFit.contain,
-              child: SizedBox(
-                width: c.value.size.width,
-                height: c.value.size.height,
-                child: VideoPlayer(c),
-              ),
+    return Container(
+      decoration: box,
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Vidéo
+          FittedBox(
+            fit: BoxFit.contain,
+            child: SizedBox(
+              width: c.value.size.width,
+              height: c.value.size.height,
+              child: VideoPlayer(c),
             ),
-            if (!c.value.isPlaying)
-              Center(
-                child: Container(
-                  width: 72,
-                  height: 72,
-                  decoration: BoxDecoration(
-                    color: widget.textPrim.withValues(alpha: 0.82),
-                    shape: BoxShape.circle,
+          ),
+          // Barre de contrôles en bas
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(16, 28, 16, 14),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  colors: [Color(0xBB000000), Colors.transparent],
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Boutons
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _controlBtn(Icons.replay_5_rounded, _rewind5),
+                      const SizedBox(width: 20),
+                      _controlBtn(
+                        c.value.isPlaying
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
+                        _togglePlay,
+                        large: true,
+                      ),
+                    ],
                   ),
-                  child: const Icon(Icons.play_arrow,
-                      color: Colors.white, size: 42),
-                ),
-              ),
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: VideoProgressIndicator(
-                c,
-                allowScrubbing: true,
-                padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
-                colors: const VideoProgressColors(
-                  playedColor: Colors.white,
-                  bufferedColor: Colors.white38,
-                  backgroundColor: Colors.white24,
-                ),
+                  const SizedBox(height: 10),
+                  // Barre de progression
+                  VideoProgressIndicator(
+                    c,
+                    allowScrubbing: true,
+                    padding: EdgeInsets.zero,
+                    colors: const VideoProgressColors(
+                      playedColor: Colors.white,
+                      bufferedColor: Colors.white38,
+                      backgroundColor: Colors.white24,
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

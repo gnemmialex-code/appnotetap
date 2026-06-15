@@ -389,58 +389,191 @@ BoxDecoration get _card => BoxDecoration(
 class NotesScreen extends StatelessWidget {
   final bool embedded;
   const NotesScreen({super.key, this.embedded = false});
+
+  void _addNoteFromApp(BuildContext context) {
+    final title = TextEditingController();
+    final body = TextEditingController();
+    _showSheet(context, 'Nouvelle note rapide', (setSheet) {
+      return [
+        _sheetField(title, 'Titre de la note…'),
+        const SizedBox(height: 8),
+        _sheetField(body, 'Détail (optionnel)…', maxLines: 4),
+        const SizedBox(height: 14),
+        _sheetPrimary('Ajouter', () {
+          if (title.text.trim().isEmpty) return;
+          store.addNote(Note(
+            id: _uid(),
+            createdAt: DateTime.now(),
+            title: title.text.trim(),
+            body: body.text.trim(),
+          ));
+          Navigator.of(context).pop();
+        }),
+      ];
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final notes = store.notes;
-    final body = notes.isEmpty
-        ? const _Empty(Icons.mic_none, 'Aucune note',
-            'Touche « Tap Back » puis Note pour créer une note.')
-        : ListView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
-            itemCount: notes.length,
-            itemBuilder: (context, i) {
-              final n = notes[i];
-              return Container(
-                margin: const EdgeInsets.only(bottom: 10),
-                padding: const EdgeInsets.all(14),
-                decoration: _card,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+
+    final banner = Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.orange.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.orange.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.timer_outlined, size: 14, color: Colors.orange),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '⚡ Notes rapides · Suppression auto après 24h · Rappel toutes les heures',
+              style: GoogleFonts.montserrat(
+                  fontSize: 11, color: Colors.orange.shade700, height: 1.4),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    final fab = Positioned(
+      right: 16,
+      bottom: 16,
+      child: FloatingActionButton(
+        heroTag: 'notes_fab',
+        backgroundColor: _textPrimary,
+        foregroundColor: _onPrimary,
+        onPressed: () => _addNoteFromApp(context),
+        child: const Icon(Icons.add, size: 28),
+      ),
+    );
+
+    Widget listContent;
+    if (notes.isEmpty) {
+      listContent = const _Empty(Icons.mic_none, 'Aucune note rapide',
+          'Touche « + » ou « Tap Back » puis Note pour créer une note rapide.');
+    } else {
+      listContent = ListView.builder(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+        itemCount: notes.length,
+        itemBuilder: (context, i) {
+          final n = notes[i];
+          final deleteAt = n.createdAt.add(const Duration(hours: 24));
+          final remaining = deleteAt.difference(DateTime.now());
+          final remainingText = remaining.isNegative
+              ? 'Expirée'
+              : remaining.inHours >= 1
+                  ? '${remaining.inHours}h restante${remaining.inHours > 1 ? 's' : ''}'
+                  : '${remaining.inMinutes}min';
+          final isUrgent = !remaining.isNegative && remaining.inHours < 2;
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(14),
+            decoration: _card,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(n.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.montserrat(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                  color: _textPrimary)),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline, size: 24),
-                          color: _textSecondary,
-                          onPressed: () => store.deleteNote(n.id),
-                        ),
-                      ],
-                    ),
-                    if (n.body.isNotEmpty)
-                      Text(n.body,
-                          maxLines: 3,
+                    Expanded(
+                      child: Text(n.title,
+                          maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.montserrat(
-                              fontSize: 16, color: _textSecondary, height: 1.4)),
-                    const SizedBox(height: 6),
-                    Text(formatStamp(n.createdAt),
-                        style: GoogleFonts.montserrat(
-                            fontSize: 13, color: _textFaint)),
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              color: _textPrimary)),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.bookmark_add_outlined, size: 22),
+                      color: _textSecondary,
+                      tooltip: 'Déplacer vers À lire',
+                      onPressed: () {
+                        store.moveNoteToReading(n.id);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Note déplacée vers « À lire »',
+                                style: GoogleFonts.montserrat()),
+                            duration: const Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, size: 22),
+                      color: _textSecondary,
+                      onPressed: () => store.deleteNote(n.id),
+                    ),
                   ],
                 ),
-              );
-            },
+                if (n.body.isNotEmpty)
+                  Text(n.body,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.montserrat(
+                          fontSize: 16, color: _textSecondary, height: 1.4)),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(formatStamp(n.createdAt),
+                          style: GoogleFonts.montserrat(
+                              fontSize: 13, color: _textFaint)),
+                    ),
+                    Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: (isUrgent ? Colors.red : Colors.orange)
+                            .withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(7),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.timer_outlined,
+                              size: 11,
+                              color: isUrgent ? Colors.red : Colors.orange),
+                          const SizedBox(width: 3),
+                          Text(remainingText,
+                              style: GoogleFonts.montserrat(
+                                  fontSize: 11,
+                                  color: isUrgent
+                                      ? Colors.red
+                                      : Colors.orange.shade700)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           );
-    return embedded ? body : _Page(title: 'Notes', child: body);
+        },
+      );
+    }
+
+    final body = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        banner,
+        Expanded(
+          child: Stack(
+            children: [
+              Positioned.fill(child: listContent),
+              fab,
+            ],
+          ),
+        ),
+      ],
+    );
+
+    return embedded ? body : _Page(title: '📱 Notes', child: body);
   }
 }
 
@@ -467,19 +600,37 @@ class _TodosScreenState extends State<TodosScreen> {
       children: [
         _header(active.length, done.length),
         Expanded(
-          child: list.isEmpty
-              ? _emptyFor(_showArchive)
-              : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
-                  itemCount: list.length,
-                  itemBuilder: (context, i) => _showArchive
-                      ? _archiveTile(list[i])
-                      : _TodoTile(
-                          key: ValueKey(list[i].id),
-                          todo: list[i],
-                          onEdit: () => _editTodo(list[i]),
-                        ),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: list.isEmpty
+                    ? _emptyFor(_showArchive)
+                    : ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
+                        itemCount: list.length,
+                        itemBuilder: (context, i) => _showArchive
+                            ? _archiveTile(list[i])
+                            : _TodoTile(
+                                key: ValueKey(list[i].id),
+                                todo: list[i],
+                                onEdit: () => _editTodo(list[i]),
+                              ),
+                      ),
+              ),
+              if (!_showArchive)
+                Positioned(
+                  right: 16,
+                  bottom: 16,
+                  child: FloatingActionButton(
+                    heroTag: 'todo_fab',
+                    backgroundColor: _textPrimary,
+                    foregroundColor: _onPrimary,
+                    onPressed: _addTodo,
+                    child: const Icon(Icons.add, size: 28),
+                  ),
                 ),
+            ],
+          ),
         ),
       ],
     );
@@ -488,18 +639,8 @@ class _TodosScreenState extends State<TodosScreen> {
 
   Widget _header(int activeCount, int doneCount) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 8, 10),
-      child: Row(
-        children: [
-          Expanded(child: _segmented(activeCount, doneCount)),
-          if (!_showArchive)
-            IconButton(
-              icon: Icon(Icons.add_circle_outline,
-                  size: 28, color: _textPrimary),
-              onPressed: _addTodo,
-            ),
-        ],
-      ),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      child: _segmented(activeCount, doneCount),
     );
   }
 
@@ -847,23 +988,105 @@ class _TodoTileState extends State<_TodoTile>
 class ReadingScreen extends StatelessWidget {
   final bool embedded;
   const ReadingScreen({super.key, this.embedded = false});
+
+  void _addReadingItem(BuildContext context) {
+    final text = TextEditingController();
+    DateTime? remindAt;
+    String? imageB64;
+    _showSheet(context, 'Ajouter à lire', (setSheet) {
+      return [
+        _sheetField(text, 'Texte ou URL…', maxLines: 3),
+        const SizedBox(height: 8),
+        _DateTimeRow(
+          when: remindAt,
+          optional: true,
+          onPick: (d) => setSheet(() => remindAt = d),
+        ),
+        const SizedBox(height: 8),
+        PressPop(
+          child: OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _textPrimary,
+              side: BorderSide(color: _border),
+              minimumSize: const Size.fromHeight(54),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14)),
+            ),
+            icon: const Icon(Icons.image_outlined, size: 22),
+            label: Text(
+              imageB64 == null ? 'Ajouter une image' : 'Image ajoutée ✓',
+              style: GoogleFonts.montserrat(fontWeight: FontWeight.w600),
+            ),
+            onPressed: () async {
+              final picked = await ImagePicker().pickImage(
+                source: ImageSource.gallery,
+                maxWidth: 1280,
+                imageQuality: 80,
+              );
+              if (picked == null) return;
+              final bytes = await picked.readAsBytes();
+              setSheet(() => imageB64 = base64Encode(bytes));
+            },
+          ),
+        ),
+        const SizedBox(height: 14),
+        _sheetPrimary('Ajouter', () {
+          if (text.text.trim().isEmpty && imageB64 == null) return;
+          final item = ReadItem(
+            id: _uid(),
+            createdAt: DateTime.now(),
+            text: text.text.trim(),
+            remindAt: remindAt,
+            imageB64: imageB64,
+          );
+          if (remindAt != null) {
+            Notifications.schedule(
+              id: item.notificationId,
+              body: item.text.isEmpty ? 'Élément à lire' : item.text,
+              when: remindAt!,
+            );
+          }
+          store.addReading(item);
+          Navigator.of(context).pop();
+        }),
+      ];
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final items = store.reading;
-    final body = items.isEmpty
-        ? const _Empty(Icons.bookmark_border, 'Rien à lire pour l\'instant',
-            'Touche « Tap Back » puis « À lire » pour garder un lien/texte et programmer un rappel.')
-        : ListView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
-            itemCount: items.length,
-            itemBuilder: (context, i) {
-              final it = items[i];
-              return Container(
-                margin: const EdgeInsets.only(bottom: 10),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                decoration: _card,
-                child: Row(
+
+    final fab = Positioned(
+      right: 16,
+      bottom: 16,
+      child: FloatingActionButton(
+        heroTag: 'reading_fab',
+        backgroundColor: _textPrimary,
+        foregroundColor: _onPrimary,
+        onPressed: () => _addReadingItem(context),
+        child: const Icon(Icons.add, size: 28),
+      ),
+    );
+
+    Widget listContent;
+    if (items.isEmpty) {
+      listContent = const _Empty(Icons.bookmark_border, 'Rien à lire',
+          'Touche « + » ou « Tap Back » puis « À lire » pour garder un lien/texte.');
+    } else {
+      listContent = ListView.builder(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+        itemCount: items.length,
+        itemBuilder: (context, i) {
+          final it = items[i];
+          return Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            decoration: _card,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     IconButton(
@@ -885,27 +1108,22 @@ class ReadingScreen extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.montserrat(
                               fontSize: 17,
-                              decoration: it.done
-                                  ? TextDecoration.lineThrough
-                                  : null,
-                              color: it.done
-                                  ? _textFaint
-                                  : _textPrimary,
+                              decoration:
+                                  it.done ? TextDecoration.lineThrough : null,
+                              color: it.done ? _textFaint : _textPrimary,
                             ),
                           ),
                           if (it.remindAt != null)
                             Padding(
                               padding: const EdgeInsets.only(top: 2),
-                              child: Text(
-                                  '⏰ ${formatStamp(it.remindAt!)}',
+                              child: Text('⏰ ${formatStamp(it.remindAt!)}',
                                   style: GoogleFonts.montserrat(
                                       fontSize: 13,
                                       color: Colors.orange.shade700)),
                             ),
                           Text('Ajouté : ${formatStamp(it.createdAt)}',
                               style: GoogleFonts.montserrat(
-                                  fontSize: 13,
-                                  color: _textFaint)),
+                                  fontSize: 13, color: _textFaint)),
                         ],
                       ),
                     ),
@@ -919,10 +1137,34 @@ class ReadingScreen extends StatelessWidget {
                     ),
                   ],
                 ),
-              );
-            },
+                if (it.imageB64 != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.memory(
+                        base64Decode(it.imageB64!),
+                        height: 160,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           );
-    return embedded ? body : _Page(title: 'À lire', child: body);
+        },
+      );
+    }
+
+    final body = Stack(
+      children: [
+        Positioned.fill(child: listContent),
+        fab,
+      ],
+    );
+
+    return embedded ? body : _Page(title: '📚 À lire', child: body);
   }
 }
 
@@ -964,9 +1206,9 @@ class _CaptureHubState extends State<CaptureHub>
         TabBar(
           controller: _c,
           tabs: const [
-            Tab(text: '🎙️ Notes'),
+            Tab(text: '📱 Notes'),
             Tab(text: '✅ To-Do'),
-            Tab(text: '🔖 À lire'),
+            Tab(text: '📚 À lire'),
           ],
         ),
         Expanded(

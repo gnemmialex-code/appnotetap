@@ -170,6 +170,7 @@ class ReadItem {
   String text;
   DateTime? remindAt;
   bool done;
+  String? imageB64; // image optionnelle encodée en base64
 
   ReadItem({
     required this.id,
@@ -177,6 +178,7 @@ class ReadItem {
     required this.text,
     this.remindAt,
     this.done = false,
+    this.imageB64,
   });
 
   bool get isUrl => RegExp(r'^https?://', caseSensitive: false).hasMatch(text);
@@ -190,6 +192,7 @@ class ReadItem {
         'text': text,
         'remindAt': remindAt?.toIso8601String(),
         'done': done,
+        'imageB64': imageB64,
       };
 
   factory ReadItem.fromJson(Map<String, dynamic> j) => ReadItem(
@@ -200,5 +203,6 @@ class ReadItem {
             ? DateTime.parse(j['remindAt'] as String)
             : null,
         done: j['done'] as bool? ?? false,
+        imageB64: j['imageB64'] as String?,
       );
 }

@@ -78,4 +78,52 @@ class Notifications {
     if (!_ready) return;
     await _plugin.cancel(id: id);
   }
+
+  static const _noteDetails = NotificationDetails(
+    android: AndroidNotificationDetails(
+      'note_reminders',
+      'Rappels notes rapides',
+      channelDescription: 'Rappels horaires pour les notes rapides — suppression après 24h',
+      importance: Importance.defaultImportance,
+      priority: Priority.defaultPriority,
+    ),
+    iOS: DarwinNotificationDetails(),
+  );
+
+  static int _noteHourlyId(int baseId, int hour) => baseId * 24 + hour;
+
+  /// Planifie jusqu'à 24 rappels horaires (1 par heure) pour une note rapide.
+  /// Appeler cancelNoteReminders quand la note est supprimée.
+  static Future<void> scheduleNoteReminders({
+    required int baseId,
+    required String title,
+    required DateTime createdAt,
+  }) async {
+    if (!_ready) await init();
+    final now = DateTime.now();
+    for (int h = 1; h <= 24; h++) {
+      final when = createdAt.add(Duration(hours: h));
+      if (when.isBefore(now)) continue;
+      try {
+        await _plugin.zonedSchedule(
+          id: _noteHourlyId(baseId, h),
+          title: '⚡ Note rapide',
+          body: title,
+          scheduledDate: tz.TZDateTime.from(when, tz.local),
+          notificationDetails: _noteDetails,
+          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        );
+      } catch (e) {
+        debugPrint('Note notif h$h non planifiée : $e');
+      }
+    }
+  }
+
+  /// Annule tous les rappels horaires d'une note rapide.
+  static Future<void> cancelNoteReminders(int baseId) async {
+    if (!_ready) return;
+    for (int h = 1; h <= 24; h++) {
+      await _plugin.cancel(id: _noteHourlyId(baseId, h));
+    }
+  }
 }

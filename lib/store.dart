@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'models.dart';
+import 'notifications.dart';
 
 const _tapbackChannel = MethodChannel('com.gnemmialex.tapbacknote/tapback');
 
@@ -51,6 +52,26 @@ class Store extends ChangeNotifier {
     notes
       ..clear()
       ..addAll(_decodeList(prefs.getString(_kNotes), Note.fromJson));
+
+    // Auto-purge des notes rapides expirées (plus de 24h)
+    final cutoff = DateTime.now().subtract(const Duration(hours: 24));
+    final staleNotes = notes.where((n) => n.createdAt.isBefore(cutoff)).toList();
+    if (staleNotes.isNotEmpty) {
+      for (final n in staleNotes) {
+        Notifications.cancelNoteReminders(n.id.hashCode & 0x00FFFFFF);
+      }
+      notes.removeWhere((n) => n.createdAt.isBefore(cutoff));
+      _save(_kNotes, notes); // fire & forget
+    }
+    // Replanifie les rappels pour les notes actives (inclut celles du panneau)
+    for (final n in notes) {
+      Notifications.scheduleNoteReminders(
+        baseId: n.id.hashCode & 0x00FFFFFF,
+        title: n.title,
+        createdAt: n.createdAt,
+      );
+    }
+
     todos
       ..clear()
       ..addAll(_decodeList(prefs.getString(_kTodos), Todo.fromJson));
@@ -121,12 +142,39 @@ class Store extends ChangeNotifier {
     notes.insert(0, n);
     notifyListeners();
     await _save(_kNotes, notes);
+    Notifications.scheduleNoteReminders(
+      baseId: n.id.hashCode & 0x00FFFFFF,
+      title: n.title,
+      createdAt: n.createdAt,
+    );
   }
 
   Future<void> deleteNote(String id) async {
+    Notifications.cancelNoteReminders(id.hashCode & 0x00FFFFFF);
     notes.removeWhere((e) => e.id == id);
     notifyListeners();
     await _save(_kNotes, notes);
+  }
+
+  /// Déplace une note rapide vers « À lire » et annule ses rappels.
+  Future<void> moveNoteToReading(String noteId) async {
+    final noteIndex = notes.indexWhere((n) => n.id == noteId);
+    if (noteIndex == -1) return;
+    final note = notes[noteIndex];
+    final text = note.body.isNotEmpty
+        ? '${note.title}\n${note.body}'
+        : note.title;
+    final item = ReadItem(
+      id: DateTime.now().microsecondsSinceEpoch.toRadixString(36),
+      createdAt: DateTime.now(),
+      text: text,
+    );
+    notes.removeAt(noteIndex);
+    reading.insert(0, item);
+    notifyListeners();
+    await _save(_kNotes, notes);
+    await _save(_kReading, reading);
+    Notifications.cancelNoteReminders(noteId.hashCode & 0x00FFFFFF);
   }
 
   // --- Todos ---

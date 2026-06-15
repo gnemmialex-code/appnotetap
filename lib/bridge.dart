@@ -15,6 +15,12 @@ Future<void> openAccessibilitySettings() async {
   } catch (_) {}
 }
 
+Future<void> openShortcutsApp() async {
+  try {
+    await _channel.invokeMethod('openShortcuts');
+  } catch (_) {}
+}
+
 /// Renvoie l'app en arrière-plan (retour à l'écran d'accueil de l'iPhone).
 /// Utilisé quand on ferme la petite fenêtre rapide.
 Future<void> minimizeApp() async {

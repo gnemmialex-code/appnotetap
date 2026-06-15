@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import 'bridge.dart';
 import 'models.dart';
@@ -670,6 +673,7 @@ class _PhoneCommandPanelState extends State<_PhoneCommandPanel> {
   final _noteBody  = TextEditingController();
   final _todoText  = TextEditingController();
   final _readText  = TextEditingController();
+  String? _readImageB64;
 
   @override
   void dispose() {
@@ -788,6 +792,19 @@ class _PhoneCommandPanelState extends State<_PhoneCommandPanel> {
       _field(_noteTitle, 'Titre…', autofocus: true),
       const SizedBox(height: 7),
       _field(_noteBody, 'Corps de la note…', maxLines: 3),
+      const SizedBox(height: 6),
+      // Avertissement suppression 24h
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF3E0),
+          borderRadius: BorderRadius.circular(9),
+        ),
+        child: const Text(
+          '⚡ Suppression auto après 24h · Déplace vers « À lire » pour conserver sans limite',
+          style: TextStyle(fontSize: 9.5, color: Color(0xFFE65100), height: 1.4),
+        ),
+      ),
       const SizedBox(height: 10),
       _saveBtn('Enregistrer', () {
         final t = _noteTitle.text.trim();
@@ -827,15 +844,80 @@ class _PhoneCommandPanelState extends State<_PhoneCommandPanel> {
       _backRow('À lire plus tard'),
       const SizedBox(height: 10),
       _field(_readText, 'Lien ou texte à retenir…', autofocus: true),
+      const SizedBox(height: 8),
+      // Sélecteur d'image
+      GestureDetector(
+        onTap: _pickReadImage,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF2F2F5),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.image_outlined, size: 16, color: Colors.black54),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _readImageB64 == null ? 'Ajouter une image…' : 'Image ajoutée ✓',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: _readImageB64 == null
+                        ? Colors.black38
+                        : const Color(0xFF2E7D32),
+                  ),
+                ),
+              ),
+              if (_readImageB64 != null)
+                GestureDetector(
+                  onTap: () => setState(() => _readImageB64 = null),
+                  child: const Icon(Icons.close, size: 14, color: Colors.black38),
+                ),
+            ],
+          ),
+        ),
+      ),
+      // Aperçu image sélectionnée
+      if (_readImageB64 != null) ...[
+        const SizedBox(height: 7),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Image.memory(
+            base64Decode(_readImageB64!),
+            height: 80,
+            width: double.infinity,
+            fit: BoxFit.cover,
+          ),
+        ),
+      ],
       const SizedBox(height: 10),
       _saveBtn('Enregistrer', () {
         final t = _readText.text.trim();
-        if (t.isEmpty) return;
-        store.addReading(ReadItem(id: _uid(), createdAt: DateTime.now(), text: t));
+        if (t.isEmpty && _readImageB64 == null) return;
+        store.addReading(ReadItem(
+          id: _uid(),
+          createdAt: DateTime.now(),
+          text: t,
+          imageB64: _readImageB64,
+        ));
         widget.onTabSwitch(2);
       }),
     ],
   );
+
+  Future<void> _pickReadImage() async {
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 800,
+        imageQuality: 75,
+      );
+      if (picked == null || !mounted) return;
+      final bytes = await picked.readAsBytes();
+      setState(() => _readImageB64 = base64Encode(bytes));
+    } catch (_) {}
+  }
 
   // ── Shared helpers ──
 

@@ -41,8 +41,19 @@ private let kWidgetKeys = ["flutter.tbc_todos", "flutter.tbc_notes", "flutter.tb
       switch call.method {
 
       case "openAccessibility":
-        // Deep-link vers les réglages Accessibilité
-        if let url = URL(string: "App-prefs:Accessibility") {
+        // Réglages → Accessibilité → Toucher → Toucher le dos de l'appareil
+        let deepLink = "App-prefs:Accessibility&path=TOUCH/BACK_TAP"
+        let fallback = "App-prefs:Accessibility"
+        if let url = URL(string: deepLink) {
+          UIApplication.shared.open(url, options: [:], completionHandler: nil)
+        } else if let url = URL(string: fallback) {
+          UIApplication.shared.open(url, options: [:], completionHandler: nil)
+        }
+        result(nil)
+
+      case "openShortcuts":
+        // Ouvre l'application Raccourcis iOS
+        if let url = URL(string: "shortcuts://") {
           UIApplication.shared.open(url, options: [:], completionHandler: nil)
         }
         result(nil)

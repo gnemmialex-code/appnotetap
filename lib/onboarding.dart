@@ -97,9 +97,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   void _goToInstallation() => setState(() => _showInstallation = true);
 
-  Future<void> _finish({required bool configure}) async {
+  Future<void> _done() async {
     await store.markBackTapSetupDone();
-    if (configure) openAccessibilitySettings();
     if (mounted) Navigator.of(context).pushReplacementNamed('/app');
   }
 
@@ -115,10 +114,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         child: child,
       ),
       child: _showInstallation
-          ? _InstallationPhase(
-              key: const ValueKey('install'), onFinish: _finish)
+          ? _InstallationPhase(key: const ValueKey('install'), onDone: _done)
           : _PresentationPhase(
               key: const ValueKey('present'), onNext: _goToInstallation),
+    );
+  }
+}
+
+/// Accessible depuis Réglages → Mettre en place.
+class SetupGuideScreen extends StatelessWidget {
+  const SetupGuideScreen({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return _InstallationPhase(
+      onDone: () => Navigator.of(context).pop(),
     );
   }
 }
@@ -709,15 +718,19 @@ class _TagChip extends StatelessWidget {
 // ── Phase 2 : Installation ────────────────────────────────────────────────────
 
 class _InstallationPhase extends StatefulWidget {
-  final void Function({required bool configure}) onFinish;
-  const _InstallationPhase({super.key, required this.onFinish});
+  /// Appelé uniquement quand la partie Test revient au premier plan,
+  /// ou quand l'utilisateur clique « Passer pour l'instant ».
+  final VoidCallback onDone;
+  const _InstallationPhase({super.key, required this.onDone});
   @override
   State<_InstallationPhase> createState() => _InstallationPhaseState();
 }
 
-class _InstallationPhaseState extends State<_InstallationPhase> {
+class _InstallationPhaseState extends State<_InstallationPhase>
+    with WidgetsBindingObserver {
   int _part = 0;
   Set<String> _assets = const {};
+  bool _waitingForTestReturn = false;
 
   static const _bg = Color(0xFFF5F5FA);
   static const _surface = Color(0xFFFFFFFF);
@@ -728,12 +741,45 @@ class _InstallationPhaseState extends State<_InstallationPhase> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadAssets();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _waitingForTestReturn) {
+      _waitingForTestReturn = false;
+      widget.onDone();
+    }
   }
 
   Future<void> _loadAssets() async {
     final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
     if (mounted) setState(() => _assets = manifest.listAssets().toSet());
+  }
+
+  String get _btnLabel => switch (_part) {
+        0 => 'Ouvrir Raccourcis →',
+        1 => 'Ouvrir Réglages →',
+        _ => 'Tester maintenant →',
+      };
+
+  void _handleBtn() {
+    switch (_part) {
+      case 0:
+        openShortcutsApp();
+      case 1:
+        openAccessibilitySettings();
+      case 2:
+        _waitingForTestReturn = true;
+        openShortcutsApp();
+    }
   }
 
   @override
@@ -826,13 +872,10 @@ class _InstallationPhaseState extends State<_InstallationPhase> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _InstallButton(
-                    label: 'Configurer maintenant',
-                    onTap: () => widget.onFinish(configure: true),
-                  ),
+                  _InstallButton(label: _btnLabel, onTap: _handleBtn),
                   const SizedBox(height: 10),
                   GestureDetector(
-                    onTap: () => widget.onFinish(configure: false),
+                    onTap: widget.onDone,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       child: Text(

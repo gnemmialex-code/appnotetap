@@ -2006,17 +2006,62 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 18),
-          // Mettre en place : guide illustré (images dans assets/setup/).
+          // Mettre en place — collapsible, ouvre le guide vidéo
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
-            child: Text('Mettre en place',
+            child: Text('Configuration',
                 style: GoogleFonts.montserrat(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
                     color: _textSecondary,
                     letterSpacing: 0.5)),
           ),
-          const _SetupGuideCard(),
+          Container(
+            decoration: _card,
+            clipBehavior: Clip.antiAlias,
+            child: Theme(
+              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                leading: Icon(Icons.settings_remote_outlined,
+                    color: _textSecondary, size: 22),
+                title: Text('Mettre en place',
+                    style: GoogleFonts.montserrat(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: _textPrimary)),
+                subtitle: Text('Guide de configuration du double-tap',
+                    style: GoogleFonts.montserrat(
+                        fontSize: 12, color: _textSecondary)),
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                              builder: (_) => const SetupGuideScreen()),
+                        ),
+                        icon:
+                            const Icon(Icons.play_circle_outline, size: 18),
+                        label: Text('Revoir la configuration',
+                            style: GoogleFonts.montserrat(
+                                fontWeight: FontWeight.w600)),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: _textPrimary,
+                          foregroundColor: _onPrimary,
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14)),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
           const SizedBox(height: 18),
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),

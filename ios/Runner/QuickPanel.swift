@@ -17,7 +17,6 @@
 // pour ne pas écraser ce que les intents ont écrit en arrière-plan.
 
 import AppIntents
-import PhotosUI
 import SwiftUI
 
 // MARK: - Pont de stockage vers shared_preferences (lib/store.dart)
@@ -362,11 +361,50 @@ struct CancelReadingFormIntent: SnippetIntent {
   }
 }
 
+// Saisie de texte via le dialog système (@Parameter) — TextField ne fonctionne
+// pas dans les SnippetViews iOS 26.
+@available(iOS 26.0, *)
+struct EnterReadingTextIntent: SnippetIntent {
+  static let title: LocalizedStringResource = "Saisir le texte"
+
+  @Parameter(title: "Texte ou lien", requestValueDialog: "Quoi lire plus tard ?")
+  var text: String
+
+  func perform() async throws -> some IntentResult & ShowsSnippetView {
+    UserDefaults.standard.set(text, forKey: "qp_reading_draft")
+    return .result(view: ReadingFormView())
+  }
+}
+
+// Sélection d'image via le file picker système (@Parameter IntentFile).
+@available(iOS 26.0, *)
+struct AddReadingImageIntent: SnippetIntent {
+  static let title: LocalizedStringResource = "Choisir une image"
+
+  @Parameter(title: "Image")
+  var imageFile: IntentFile
+
+  func perform() async throws -> some IntentResult & ShowsSnippetView {
+    if let raw = try? imageFile.data, !raw.isEmpty {
+      UserDefaults.standard.set(Self.compress(raw), forKey: "qp_reading_image_data")
+    }
+    return .result(view: ReadingFormView())
+  }
+
+  private static func compress(_ raw: Data) -> Data {
+    guard let ui = UIImage(data: raw) else { return raw }
+    let scale = min(800 / ui.size.width, 800 / ui.size.height, 1)
+    let size = CGSize(width: ui.size.width * scale, height: ui.size.height * scale)
+    let renderer = UIGraphicsImageRenderer(size: size)
+    let resized = renderer.image { _ in ui.draw(in: CGRect(origin: .zero, size: size)) }
+    return resized.jpegData(compressionQuality: 0.75) ?? raw
+  }
+}
+
 @available(iOS 26.0, *)
 struct ReadingFormView: View {
   @AppStorage("qp_reading_draft") private var text = ""
   @AppStorage("qp_reading_image_data") private var imageData: Data = Data()
-  @State private var selectedItem: PhotosPickerItem?
 
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
@@ -374,41 +412,40 @@ struct ReadingFormView: View {
         .font(.system(size: 15, weight: .heavy))
         .frame(maxWidth: .infinity, alignment: .center)
 
-      TextField("Lien ou texte à retenir…", text: $text, axis: .vertical)
-        .lineLimit(3, reservesSpace: false)
-        .textFieldStyle(.roundedBorder)
-        .font(.system(size: 14))
+      // Bouton texte → dialog @Parameter
+      Button(intent: EnterReadingTextIntent()) {
+        HStack(spacing: 8) {
+          Image(systemName: "text.cursor")
+            .foregroundColor(.secondary)
+          Text(text.isEmpty ? "Lien ou texte à retenir…" : text)
+            .font(.system(size: 13))
+            .foregroundColor(text.isEmpty ? .secondary : .primary)
+            .lineLimit(3)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.secondary.opacity(0.25), lineWidth: 1))
+      }
+      .buttonStyle(.plain)
 
-      PhotosPicker(selection: $selectedItem, matching: .images) {
+      // Bouton image → file picker @Parameter
+      Button(intent: AddReadingImageIntent()) {
         HStack(spacing: 6) {
           Image(systemName: imageData.isEmpty ? "photo.badge.plus" : "photo.fill")
-            .foregroundColor(imageData.isEmpty ? .secondary : .blue)
+            .foregroundColor(imageData.isEmpty ? .secondary : Color.blue)
           Text(imageData.isEmpty ? "Ajouter une image" : "Image sélectionnée ✓")
             .font(.system(size: 13))
-            .foregroundColor(imageData.isEmpty ? .secondary : .blue)
+            .foregroundColor(imageData.isEmpty ? .secondary : Color.blue)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
+        .padding(.vertical, 10)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
       }
-      .onChange(of: selectedItem) { _, item in
-        Task {
-          guard let item else { return }
-          guard let raw = try? await item.loadTransferable(type: Data.self),
-                !raw.isEmpty else { return }
-          // Redimensionne à 800 px max, qualité 75 % pour éviter un JSON trop lourd.
-          if let ui = UIImage(data: raw) {
-            let scale = min(800 / ui.size.width, 800 / ui.size.height, 1)
-            let newSize = CGSize(width: ui.size.width * scale, height: ui.size.height * scale)
-            let renderer = UIGraphicsImageRenderer(size: newSize)
-            let resized = renderer.image { _ in ui.draw(in: CGRect(origin: .zero, size: newSize)) }
-            imageData = resized.jpegData(compressionQuality: 0.75) ?? raw
-          } else {
-            imageData = raw
-          }
-        }
-      }
+      .buttonStyle(.plain)
 
+      // Aperçu image
       if !imageData.isEmpty, let ui = UIImage(data: imageData) {
         Image(uiImage: ui)
           .resizable()
@@ -418,25 +455,32 @@ struct ReadingFormView: View {
           .clipped()
       }
 
+      // Boutons de même taille — style custom identique pour les deux
       HStack(spacing: 8) {
         Button(intent: CancelReadingFormIntent()) {
           Text("Annuler")
-            .font(.system(size: 14, weight: .medium))
+            .font(.system(size: 14, weight: .semibold))
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
+            .padding(.vertical, 10)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
 
         Button(intent: SaveReadingFromFormIntent()) {
           Text("Enregistrer")
             .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(text.trimmingCharacters(in: .whitespaces).isEmpty
+              ? Color.white.opacity(0.4) : Color.white)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
+            .padding(.vertical, 10)
+            .background(
+              text.trimmingCharacters(in: .whitespaces).isEmpty
+                ? Color.gray.opacity(0.35) : Color.black,
+              in: RoundedRectangle(cornerRadius: 12)
+            )
         }
+        .buttonStyle(.plain)
         .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)
-        .buttonStyle(.borderedProminent)
-        .tint(.black)
       }
     }
     .padding()

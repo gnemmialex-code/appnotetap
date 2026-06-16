@@ -1262,7 +1262,13 @@ class _AgendaScreenState extends State<AgendaScreen> {
     final linked = calendarSync.linked;
     // Une fois connecté, le Calendrier iPhone est la source de vérité ;
     // sinon l'Agenda reste local (web de développement, accès refusé…).
-    final events = linked ? calendarSync.events : store.events;
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final allEvents = linked ? calendarSync.events : store.events;
+    // On n'affiche que les événements à partir d'aujourd'hui (minuit).
+    final events = allEvents
+        .where((e) => !e.when.isBefore(todayStart))
+        .toList();
     return _Page(
       title: 'Agenda',
       trailing: PressPop(
@@ -1276,15 +1282,57 @@ class _AgendaScreenState extends State<AgendaScreen> {
           if (!calendarSync.available) _webInfoCard(),
           if (calendarSync.available && !linked) _linkCard(),
           if (linked) _syncedBadge(),
+          _todayHeader(now),
           Expanded(
             child: events.isEmpty
-                ? const _Empty(Icons.event, 'Aucun événement',
+                ? const _Empty(Icons.event, 'Aucun événement à venir',
                     'Touche « + » pour ajouter un événement à ton agenda.')
                 : ListView.builder(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
                     itemCount: events.length,
                     itemBuilder: (context, i) => _eventTile(events[i]),
                   ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _todayHeader(DateTime now) {
+    const dayNames = [
+      'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'
+    ];
+    const monthNames = [
+      '', 'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+      'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'
+    ];
+    final label =
+        '${dayNames[now.weekday - 1]} ${now.day} ${monthNames[now.month]} ${now.year}';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: _textPrimary,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              "Aujourd'hui",
+              style: GoogleFonts.montserrat(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: _onPrimary),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: GoogleFonts.montserrat(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: _textSecondary),
           ),
         ],
       ),

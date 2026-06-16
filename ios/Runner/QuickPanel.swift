@@ -361,34 +361,51 @@ struct CancelReadingFormIntent: SnippetIntent {
   }
 }
 
-// Saisie de texte via le dialog système (@Parameter) — TextField ne fonctionne
-// pas dans les SnippetViews iOS 26.
+// SnippetIntent intermédiaire : rafraîchit ReadingFormView après saisie de
+// texte ou d'image (le @AppStorage se met à jour, la vue reflète l'état courant).
 @available(iOS 26.0, *)
-struct EnterReadingTextIntent: SnippetIntent {
-  static let title: LocalizedStringResource = "Saisir le texte"
-
-  @Parameter(title: "Texte ou lien", requestValueDialog: "Quoi lire plus tard ?")
-  var text: String
+struct RefreshReadingFormIntent: SnippetIntent {
+  static let title: LocalizedStringResource = "Afficher formulaire À lire"
 
   func perform() async throws -> some IntentResult & ShowsSnippetView {
-    UserDefaults.standard.set(text, forKey: "qp_reading_draft")
     return .result(view: ReadingFormView())
   }
 }
 
-// Sélection d'image via le file picker système (@Parameter IntentFile).
+// AppIntent (pas SnippetIntent) : la résolution @Parameter(requestValueDialog:)
+// fonctionne correctement pour les AppIntents standard mais pas pour les
+// SnippetIntents sur iOS 26 (qui affichaient un simple "OK" sans champ texte).
+// Après saisie, on retourne via ShowsSnippetIntent vers RefreshReadingFormIntent
+// qui réaffiche le formulaire avec le texte enregistré.
 @available(iOS 26.0, *)
-struct AddReadingImageIntent: SnippetIntent {
+struct EnterReadingTextIntent: AppIntent {
+  static let title: LocalizedStringResource = "Saisir le texte"
+  static let openAppWhenRun: Bool = false
+
+  @Parameter(title: "Texte ou lien", requestValueDialog: "Quoi lire plus tard ?")
+  var text: String
+
+  func perform() async throws -> some IntentResult & ShowsSnippetIntent {
+    UserDefaults.standard.set(text, forKey: "qp_reading_draft")
+    return .result(snippetIntent: RefreshReadingFormIntent())
+  }
+}
+
+// Même logique pour l'image : AppIntent standard avec @Parameter IntentFile,
+// ce qui permet au système d'afficher le sélecteur de fichiers/photos natif.
+@available(iOS 26.0, *)
+struct AddReadingImageIntent: AppIntent {
   static let title: LocalizedStringResource = "Choisir une image"
+  static let openAppWhenRun: Bool = false
 
   @Parameter(title: "Image")
   var imageFile: IntentFile
 
-  func perform() async throws -> some IntentResult & ShowsSnippetView {
+  func perform() async throws -> some IntentResult & ShowsSnippetIntent {
     if let raw = try? imageFile.data, !raw.isEmpty {
       UserDefaults.standard.set(Self.compress(raw), forKey: "qp_reading_image_data")
     }
-    return .result(view: ReadingFormView())
+    return .result(snippetIntent: RefreshReadingFormIntent())
   }
 
   private static func compress(_ raw: Data) -> Data {

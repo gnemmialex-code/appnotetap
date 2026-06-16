@@ -8,7 +8,7 @@ import AppIntents
 #endif
 
 private let kAppGroup = "group.com.gnemmialex.tapbacknote"
-private let kWidgetKeys = ["flutter.tbc_todos", "flutter.tbc_notes", "flutter.tbc_reading"]
+private let kWidgetKeys = ["flutter.tbc_todos", "flutter.tbc_notes", "flutter.tbc_reading", "flutter.tbc_carnet"]
 
 // MARK: - App Delegate
 
@@ -39,6 +39,13 @@ private let kWidgetKeys = ["flutter.tbc_todos", "flutter.tbc_notes", "flutter.tb
     )
     channel.setMethodCallHandler { call, result in
       switch call.method {
+
+      case "consumeCameraForReading":
+        // Retourne true si un intent a demandé d'ouvrir l'appareil photo
+        // pour "À lire", puis efface le flag (consommation unique).
+        let pending = UserDefaults.standard.bool(forKey: "qp_open_camera_for_reading")
+        UserDefaults.standard.removeObject(forKey: "qp_open_camera_for_reading")
+        result(pending)
 
       case "openAccessibility":
         // Ouvre la page d'accueil des Réglages iOS

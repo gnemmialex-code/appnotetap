@@ -18,6 +18,7 @@
 
 import AppIntents
 import SwiftUI
+import UniformTypeIdentifiers
 
 // MARK: - Pont de stockage vers shared_preferences (lib/store.dart)
 
@@ -166,6 +167,33 @@ enum ShortistNativeStore {
         )
       }
   }
+}
+
+// MARK: - Utilitaires image partagés entre les intents
+
+/// Compresse l'image (max 800 pt, JPEG 75 %) avant de la stocker en UserDefaults.
+private func compressImageData(_ raw: Data) -> Data {
+  guard let ui = UIImage(data: raw) else { return raw }
+  let maxDim: CGFloat = 800
+  let scale = min(maxDim / max(ui.size.width, 1), maxDim / max(ui.size.height, 1), 1)
+  let size = CGSize(width: ui.size.width * scale, height: ui.size.height * scale)
+  let renderer = UIGraphicsImageRenderer(size: size)
+  let resized = renderer.image { _ in ui.draw(in: CGRect(origin: .zero, size: size)) }
+  return resized.jpegData(compressionQuality: 0.75) ?? raw
+}
+
+/// Lit les données d'un IntentFile en essayant d'abord `data` puis `fileURL`.
+/// Sauvegarde le résultat compressé sous la clé `qp_reading_image_data`.
+private func saveIntentImageToDefaults(_ imageFile: IntentFile) {
+  var rawData: Data?
+  if let d = try? imageFile.data, !d.isEmpty {
+    rawData = d
+  } else if let url = imageFile.fileURL {
+    rawData = try? Data(contentsOf: url)
+  }
+  guard let raw = rawData, !raw.isEmpty else { return }
+  UserDefaults.standard.set(compressImageData(raw), forKey: "qp_reading_image_data")
+  UserDefaults.standard.synchronize()
 }
 
 // MARK: - Snippet interactif (iOS 26) : la carte flottante système
@@ -391,30 +419,48 @@ struct EnterReadingTextIntent: AppIntent {
   }
 }
 
-// Même logique pour l'image : AppIntent standard avec @Parameter IntentFile,
-// ce qui permet au système d'afficher le sélecteur de fichiers/photos natif.
+// Intent « Photos » : restreint aux images, ouvre PHPicker (Photos app).
 @available(iOS 26.0, *)
-struct AddReadingImageIntent: AppIntent {
-  static let title: LocalizedStringResource = "Choisir une image"
+struct AddReadingPhotosImageIntent: AppIntent {
+  static let title: LocalizedStringResource = "Choisir depuis Photos"
   static let openAppWhenRun: Bool = false
 
-  @Parameter(title: "Image")
+  @Parameter(title: "Photo", supportedContentTypes: [UTType.image])
   var imageFile: IntentFile
 
   func perform() async throws -> some IntentResult & ShowsSnippetIntent {
-    if let raw = try? imageFile.data, !raw.isEmpty {
-      UserDefaults.standard.set(Self.compress(raw), forKey: "qp_reading_image_data")
-    }
+    saveIntentImageToDefaults(imageFile)
     return .result(snippetIntent: RefreshReadingFormIntent())
   }
+}
 
-  private static func compress(_ raw: Data) -> Data {
-    guard let ui = UIImage(data: raw) else { return raw }
-    let scale = min(800 / ui.size.width, 800 / ui.size.height, 1)
-    let size = CGSize(width: ui.size.width * scale, height: ui.size.height * scale)
-    let renderer = UIGraphicsImageRenderer(size: size)
-    let resized = renderer.image { _ in ui.draw(in: CGRect(origin: .zero, size: size)) }
-    return resized.jpegData(compressionQuality: 0.75) ?? raw
+// Intent « Fichiers » : ouvre le sélecteur de documents (app Fichiers).
+@available(iOS 26.0, *)
+struct AddReadingFilesImageIntent: AppIntent {
+  static let title: LocalizedStringResource = "Choisir depuis Fichiers"
+  static let openAppWhenRun: Bool = false
+
+  @Parameter(title: "Fichier image")
+  var imageFile: IntentFile
+
+  func perform() async throws -> some IntentResult & ShowsSnippetIntent {
+    saveIntentImageToDefaults(imageFile)
+    return .result(snippetIntent: RefreshReadingFormIntent())
+  }
+}
+
+// Intent « Appareil photo » : ouvre l'app Flutter pour prendre une photo.
+@available(iOS 16.0, *)
+struct AddReadingCameraIntent: AppIntent {
+  static let title: LocalizedStringResource = "Prendre une photo"
+  // L'appareil photo nécessite que l'app soit au premier plan.
+  static let openAppWhenRun: Bool = true
+
+  func perform() async throws -> some IntentResult {
+    // Demande à Flutter d'ouvrir l'appareil photo dès son lancement.
+    UserDefaults.standard.set(true, forKey: "qp_open_camera_for_reading")
+    UserDefaults.standard.synchronize()
+    return .result()
   }
 }
 
@@ -422,6 +468,25 @@ struct AddReadingImageIntent: AppIntent {
 struct ReadingFormView: View {
   @AppStorage("qp_reading_draft") private var text = ""
   @AppStorage("qp_reading_image_data") private var imageData: Data = Data()
+
+  @ViewBuilder
+  private func imageTileLabel(icon: String, label: String, highlighted: Bool) -> some View {
+    VStack(spacing: 3) {
+      Image(systemName: icon)
+        .font(.system(size: 16))
+        .foregroundColor(highlighted ? .blue : .primary)
+      Text(label)
+        .font(.system(size: 10, weight: .semibold))
+        .foregroundColor(highlighted ? .blue : .primary)
+    }
+    .frame(maxWidth: .infinity)
+    .padding(.vertical, 9)
+    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
+    .overlay(
+      RoundedRectangle(cornerRadius: 10)
+        .stroke(highlighted ? Color.blue.opacity(0.4) : Color.secondary.opacity(0.2), lineWidth: 1)
+    )
+  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
@@ -447,22 +512,40 @@ struct ReadingFormView: View {
       }
       .buttonStyle(.plain)
 
-      // Bouton image → file picker @Parameter
-      Button(intent: AddReadingImageIntent()) {
-        HStack(spacing: 6) {
-          Image(systemName: imageData.isEmpty ? "photo.badge.plus" : "photo.fill")
-            .foregroundColor(imageData.isEmpty ? .secondary : Color.blue)
-          Text(imageData.isEmpty ? "Ajouter une image" : "Image sélectionnée ✓")
-            .font(.system(size: 13))
-            .foregroundColor(imageData.isEmpty ? .secondary : Color.blue)
+      // Trois boutons d'ajout d'image : Photo, Photos, Fichiers
+      HStack(spacing: 6) {
+        // Appareil photo (ouvre l'app Flutter)
+        Button(intent: AddReadingCameraIntent()) {
+          imageTileLabel(
+            icon: "camera",
+            label: "Photo",
+            highlighted: false
+          )
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 10)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
-      }
-      .buttonStyle(.plain)
+        .buttonStyle(.plain)
 
-      // Aperçu image
+        // Médiathèque Photos
+        Button(intent: AddReadingPhotosImageIntent()) {
+          imageTileLabel(
+            icon: imageData.isEmpty ? "photo" : "photo.fill",
+            label: "Photos",
+            highlighted: !imageData.isEmpty
+          )
+        }
+        .buttonStyle(.plain)
+
+        // App Fichiers
+        Button(intent: AddReadingFilesImageIntent()) {
+          imageTileLabel(
+            icon: "folder",
+            label: "Fichiers",
+            highlighted: false
+          )
+        }
+        .buttonStyle(.plain)
+      }
+
+      // Aperçu image si sélectionnée
       if !imageData.isEmpty, let ui = UIImage(data: imageData) {
         Image(uiImage: ui)
           .resizable()

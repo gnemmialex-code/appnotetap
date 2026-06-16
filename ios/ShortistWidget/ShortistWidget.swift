@@ -29,6 +29,7 @@ private let kAppGroup   = "group.com.gnemmialex.tapbacknote"
 private let kTodosKey   = "flutter.tbc_todos"
 private let kNotesKey   = "flutter.tbc_notes"
 private let kReadingKey = "flutter.tbc_reading"
+private let kCarnetKey  = "flutter.tbc_carnet"
 
 private func groupDefaults() -> UserDefaults { UserDefaults(suiteName: kAppGroup) ?? .standard }
 
@@ -73,6 +74,18 @@ struct WidgetNote: Identifiable {
   let body: String
 }
 
+struct WidgetReadItem: Identifiable {
+  let id: String
+  let text: String
+  let done: Bool
+}
+
+struct WidgetCarnetEntry: Identifiable {
+  let id: String
+  let title: String
+  let note: String
+}
+
 private func activeTodos() -> [WidgetTodo] {
   loadJSON(kTodosKey)
     .filter { !($0["done"] as? Bool ?? false) }
@@ -88,6 +101,23 @@ private func recentNotes() -> [WidgetNote] {
     .map { WidgetNote(id: $0["id"] as? String ?? "",
                       title: $0["title"] as? String ?? "",
                       body: $0["body"] as? String ?? "") }
+}
+
+private func activeReadingItems() -> [WidgetReadItem] {
+  loadJSON(kReadingKey)
+    .filter { !($0["done"] as? Bool ?? false) }
+    .prefix(5)
+    .map { WidgetReadItem(id: $0["id"] as? String ?? "",
+                          text: $0["text"] as? String ?? "",
+                          done: false) }
+}
+
+private func recentCarnetEntries() -> [WidgetCarnetEntry] {
+  loadJSON(kCarnetKey)
+    .prefix(5)
+    .map { WidgetCarnetEntry(id: $0["id"] as? String ?? "",
+                             title: $0["title"] as? String ?? "",
+                             note: $0["note"] as? String ?? "") }
 }
 
 // MARK: - App Intents (widget extension)
@@ -183,19 +213,33 @@ struct ShortistEntry: TimelineEntry {
   let date: Date
   let todos: [WidgetTodo]
   let notes: [WidgetNote]
+  let reading: [WidgetReadItem]
+  let carnet: [WidgetCarnetEntry]
 }
 
 struct ShortistProvider: TimelineProvider {
   func placeholder(in _: Context) -> ShortistEntry {
-    ShortistEntry(date: Date(),
+    ShortistEntry(
+      date: Date(),
       todos: [WidgetTodo(id: "1", text: "Exemple de tâche", done: false)],
-      notes: [WidgetNote(id: "1", title: "Exemple de note", body: "Texte de la note")])
+      notes: [WidgetNote(id: "1", title: "Exemple de note", body: "Texte de la note")],
+      reading: [WidgetReadItem(id: "1", text: "Article à lire plus tard", done: false)],
+      carnet: [WidgetCarnetEntry(id: "1", title: "Fiche exemple", note: "Détail de la fiche")]
+    )
   }
   func getSnapshot(in _: Context, completion: @escaping (ShortistEntry) -> Void) {
-    completion(ShortistEntry(date: Date(), todos: activeTodos(), notes: recentNotes()))
+    completion(ShortistEntry(
+      date: Date(),
+      todos: activeTodos(), notes: recentNotes(),
+      reading: activeReadingItems(), carnet: recentCarnetEntries()
+    ))
   }
   func getTimeline(in _: Context, completion: @escaping (Timeline<ShortistEntry>) -> Void) {
-    let entry = ShortistEntry(date: Date(), todos: activeTodos(), notes: recentNotes())
+    let entry = ShortistEntry(
+      date: Date(),
+      todos: activeTodos(), notes: recentNotes(),
+      reading: activeReadingItems(), carnet: recentCarnetEntries()
+    )
     let next = Calendar.current.date(byAdding: .minute, value: 15, to: Date()) ?? Date()
     completion(Timeline(entries: [entry], policy: .after(next)))
   }
@@ -463,6 +507,110 @@ struct CombinedWidget: Widget {
   }
 }
 
+// MARK: - Widget 4 : À lire
+
+struct ReadingWidgetView: View {
+  let entry: ShortistEntry
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      HStack {
+        WidgetHeader(icon: "bookmark.fill", label: "À lire")
+        if #available(iOS 17.0, *) {
+          Button(intent: WAddReadingIntent()) {
+            Image(systemName: "plus.circle.fill")
+              .font(.system(size: 20))
+              .foregroundStyle(.primary)
+          }
+          .buttonStyle(.plain)
+        }
+      }
+
+      Divider()
+
+      if entry.reading.isEmpty {
+        EmptyLabel(text: "Aucun élément à lire")
+      } else {
+        ForEach(entry.reading) { item in
+          HStack(spacing: 6) {
+            Image(systemName: "bookmark")
+              .foregroundStyle(.secondary)
+              .font(.system(size: 13))
+            Text(item.text)
+              .font(.system(size: 13, weight: .medium))
+              .lineLimit(1)
+            Spacer(minLength: 0)
+          }
+          .padding(.vertical, 1)
+        }
+      }
+      Spacer(minLength: 0)
+    }
+    .padding(14)
+    .containerBackground(.background, for: .widget)
+  }
+}
+
+struct ReadingWidget: Widget {
+  let kind = "ShortistReading"
+  var body: some WidgetConfiguration {
+    StaticConfiguration(kind: kind, provider: ShortistProvider()) { entry in
+      ReadingWidgetView(entry: entry)
+    }
+    .configurationDisplayName("À lire")
+    .description("Vos 5 éléments à lire avec ajout rapide.")
+    .supportedFamilies([.systemSmall, .systemMedium])
+  }
+}
+
+// MARK: - Widget 5 : Carnet
+
+struct CarnetWidgetView: View {
+  let entry: ShortistEntry
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      WidgetHeader(icon: "book.closed.fill", label: "Carnet")
+
+      Divider()
+
+      if entry.carnet.isEmpty {
+        EmptyLabel(text: "Carnet vide")
+      } else {
+        ForEach(entry.carnet) { fiche in
+          VStack(alignment: .leading, spacing: 1) {
+            Text(fiche.title)
+              .font(.system(size: 13, weight: .semibold))
+              .lineLimit(1)
+            if !fiche.note.isEmpty {
+              Text(fiche.note)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            }
+          }
+          .padding(.vertical, 2)
+        }
+      }
+      Spacer(minLength: 0)
+    }
+    .padding(14)
+    .containerBackground(.background, for: .widget)
+  }
+}
+
+struct CarnetWidget: Widget {
+  let kind = "ShortistCarnet"
+  var body: some WidgetConfiguration {
+    StaticConfiguration(kind: kind, provider: ShortistProvider()) { entry in
+      CarnetWidgetView(entry: entry)
+    }
+    .configurationDisplayName("Carnet")
+    .description("Vos 5 dernières fiches du Carnet.")
+    .supportedFamilies([.systemSmall, .systemMedium])
+  }
+}
+
 // MARK: - Bundle
 
 @main
@@ -470,6 +618,8 @@ struct ShortistWidgetBundle: WidgetBundle {
   var body: some Widget {
     TodosWidget()
     NotesWidget()
+    ReadingWidget()
+    CarnetWidget()
     CombinedWidget()
   }
 }

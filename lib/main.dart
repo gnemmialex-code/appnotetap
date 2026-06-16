@@ -2,10 +2,13 @@
 // Thème blanc et gris clair, police Montserrat, boutons arrondis avec ombre.
 
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show AssetManifest, rootBundle;
+import 'package:flutter/services.dart' show AssetManifest, MethodChannel, rootBundle;
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
@@ -201,12 +204,16 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   late int _tab = widget.initialTab;
-  late final int _captureSub = widget.initialSub;
+  late int _captureSub = widget.initialSub;
+
+  static const _ch = MethodChannel('com.gnemmialex.tapbacknote/tapback');
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Vérifie le flag caméra au lancement (au cas où l'intent a ouvert l'app).
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkCameraFlag());
   }
 
   @override
@@ -223,7 +230,39 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       store.load();
       calendarSync.refresh();
+      _checkCameraFlag();
     }
+  }
+
+  /// Si l'intent "Appareil photo" a ouvert l'app, navigue vers À lire
+  /// et ouvre directement le picker caméra.
+  Future<void> _checkCameraFlag() async {
+    try {
+      final pending = await _ch.invokeMethod<bool>('consumeCameraForReading');
+      if (pending != true || !mounted) return;
+      // Aller sur l'onglet Capture → À lire (index 2).
+      setState(() {
+        _tab = 0;
+        _captureSub = 2;
+      });
+      // Ouvre le picker caméra après le rendu.
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        final b64 = await _pickImageSheet(context, forceCamera: true);
+        if (b64 == null || !mounted) return;
+        _addReadingFromCamera(b64);
+      });
+    } catch (_) {}
+  }
+
+  void _addReadingFromCamera(String b64) {
+    final item = ReadItem(
+      id: _uid(),
+      createdAt: DateTime.now(),
+      text: '',
+      imageB64: b64,
+    );
+    store.addReading(item);
   }
 
   @override
@@ -1003,7 +1042,7 @@ class ReadingScreen extends StatelessWidget {
           onPick: (d) => setSheet(() => remindAt = d),
         ),
         const SizedBox(height: 8),
-        PressPop(
+        Builder(builder: (innerCtx) => PressPop(
           child: OutlinedButton.icon(
             style: OutlinedButton.styleFrom(
               foregroundColor: _textPrimary,
@@ -1018,17 +1057,12 @@ class ReadingScreen extends StatelessWidget {
               style: GoogleFonts.montserrat(fontWeight: FontWeight.w600),
             ),
             onPressed: () async {
-              final picked = await ImagePicker().pickImage(
-                source: ImageSource.gallery,
-                maxWidth: 1280,
-                imageQuality: 80,
-              );
-              if (picked == null) return;
-              final bytes = await picked.readAsBytes();
-              setSheet(() => imageB64 = base64Encode(bytes));
+              final b64 = await _pickImageSheet(innerCtx);
+              if (b64 == null) return;
+              setSheet(() => imageB64 = b64);
             },
           ),
-        ),
+        )),
         const SizedBox(height: 14),
         _sheetPrimary('Ajouter', () {
           if (text.text.trim().isEmpty && imageB64 == null) return;
@@ -1814,7 +1848,7 @@ class CarnetScreen extends StatelessWidget {
           onPick: (d) => setSheet(() => when = d),
         ),
         const SizedBox(height: 8),
-        PressPop(
+        Builder(builder: (innerCtx) => PressPop(
           child: OutlinedButton.icon(
             style: OutlinedButton.styleFrom(
               foregroundColor: _textPrimary,
@@ -1828,16 +1862,12 @@ class CarnetScreen extends StatelessWidget {
                 imageB64 == null ? 'Ajouter une image' : 'Image ajoutée ✓',
                 style: GoogleFonts.montserrat(fontWeight: FontWeight.w600)),
             onPressed: () async {
-              final picked = await ImagePicker().pickImage(
-                  source: ImageSource.gallery,
-                  maxWidth: 1280,
-                  imageQuality: 80);
-              if (picked == null) return;
-              final bytes = await picked.readAsBytes();
-              setSheet(() => imageB64 = base64Encode(bytes));
+              final b64 = await _pickImageSheet(innerCtx);
+              if (b64 == null) return;
+              setSheet(() => imageB64 = b64);
             },
           ),
-        ),
+        )),
         const SizedBox(height: 14),
         _sheetPrimary('Enregistrer la fiche', () {
           if (title.text.trim().isEmpty && note.text.trim().isEmpty) return;
@@ -2111,6 +2141,63 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 18),
+          // ── Widgets Home Screen ──────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+            child: Text('Widgets',
+                style: GoogleFonts.montserrat(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: _textSecondary,
+                    letterSpacing: 0.5)),
+          ),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: _card,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.widgets_outlined, color: _textPrimary, size: 22),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text('Widgets écran d\'accueil',
+                          style: GoogleFonts.montserrat(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: _textPrimary)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Ajoute To-Do, Notes, À lire ou Carnet en widget sur ton écran d\'accueil pour accéder rapidement à tes données.',
+                  style: GoogleFonts.montserrat(
+                      fontSize: 13, color: _textSecondary, height: 1.5),
+                ),
+                const SizedBox(height: 12),
+                PressPop(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _textPrimary,
+                      foregroundColor: _onPrimary,
+                      elevation: 0,
+                      minimumSize: const Size.fromHeight(54),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16)),
+                    ),
+                    icon: const Icon(Icons.add_to_home_screen, size: 20),
+                    label: Text('Aperçu & ajouter un widget',
+                        style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w700, fontSize: 15)),
+                    onPressed: () => _showWidgetPreview(context),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
             child: Text('Informations & documents',
@@ -2155,6 +2242,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  void _showWidgetPreview(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: _surface,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (ctx) => const _WidgetPreviewSheet(),
+    );
+  }
+
   Widget _settingsField(TextEditingController c, String hint,
       {TextInputType? keyboard}) {
     return TextField(
@@ -2187,6 +2285,78 @@ String _monthShort(int m) {
     'juil', 'août', 'sept', 'oct', 'nov', 'déc'
   ];
   return names[m];
+}
+
+/// Affiche une action sheet iOS pour choisir la source d'une image,
+/// puis retourne le contenu encodé en base64 (ou null si annulé).
+/// [forceCamera] : passe directement à l'appareil photo sans action sheet.
+Future<String?> _pickImageSheet(BuildContext context,
+    {bool forceCamera = false}) async {
+  String? source;
+  if (forceCamera) {
+    source = 'camera';
+  } else {
+    source = await showCupertinoModalPopup<String?>(
+      context: context,
+      builder: (ctx) => CupertinoActionSheet(
+        title: Text('Ajouter une image',
+            style: GoogleFonts.montserrat(fontSize: 14)),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.of(ctx).pop('camera'),
+            child: Text('📷  Prendre une photo',
+                style: GoogleFonts.montserrat()),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.of(ctx).pop('gallery'),
+            child: Text('🖼️  Photos',
+                style: GoogleFonts.montserrat()),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.of(ctx).pop('files'),
+            child: Text('📂  Fichiers',
+                style: GoogleFonts.montserrat()),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.of(ctx).pop(null),
+          child: Text('Annuler', style: GoogleFonts.montserrat()),
+        ),
+      ),
+    );
+  }
+
+  if (source == null) return null;
+  if (!context.mounted) return null;
+
+  try {
+    if (source == 'files') {
+      // Ouvre l'app Fichiers iOS via file_picker.
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+      );
+      if (result == null || result.files.isEmpty) return null;
+      final f = result.files.first;
+      final bytes =
+          f.bytes ?? (f.path != null ? await File(f.path!).readAsBytes() : null);
+      if (bytes == null) return null;
+      return base64Encode(bytes);
+    } else {
+      final imageSource =
+          source == 'camera' ? ImageSource.camera : ImageSource.gallery;
+      final picked = await ImagePicker().pickImage(
+        source: imageSource,
+        maxWidth: 1280,
+        imageQuality: 80,
+      );
+      if (picked == null) return null;
+      final bytes = await picked.readAsBytes();
+      return base64Encode(bytes);
+    }
+  } catch (_) {
+    return null;
+  }
 }
 
 void _showSheet(BuildContext context, String title,
@@ -2351,6 +2521,387 @@ class _PressPopState extends State<PressPop> {
         curve: Curves.easeOut,
         child: widget.child,
       ),
+    );
+  }
+}
+
+// ============================================================
+// Aperçu widgets écran d'accueil (Réglages)
+// ============================================================
+
+class _WidgetPreviewSheet extends StatefulWidget {
+  const _WidgetPreviewSheet();
+  @override
+  State<_WidgetPreviewSheet> createState() => _WidgetPreviewSheetState();
+}
+
+class _WidgetPreviewSheetState extends State<_WidgetPreviewSheet> {
+  int _selected = 0; // 0=To-Do, 1=Notes, 2=À lire, 3=Carnet
+
+  static const _labels = ['✅ To-Do', '📱 Notes', '📚 À lire', '📔 Carnet'];
+  static const _icons = [
+    Icons.checklist,
+    Icons.mic_none,
+    Icons.bookmark_border,
+    Icons.menu_book_outlined,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.85,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      expand: false,
+      builder: (ctx, scroll) => Padding(
+        padding: const EdgeInsets.fromLTRB(18, 14, 18, 22),
+        child: Column(
+          children: [
+            // Poignée
+            Center(
+              child: Container(
+                width: 38,
+                height: 5,
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                    color: _border, borderRadius: BorderRadius.circular(3)),
+              ),
+            ),
+            Text('Widgets écran d\'accueil',
+                style: GoogleFonts.montserrat(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: _textPrimary)),
+            const SizedBox(height: 6),
+            Text(
+              'Choisis un widget à ajouter sur ton écran d\'accueil.',
+              style: GoogleFonts.montserrat(
+                  fontSize: 13, color: _textSecondary, height: 1.4),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            // Sélecteur de type
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: List.generate(4, (i) {
+                  final sel = i == _selected;
+                  return GestureDetector(
+                    onTap: () => setState(() => _selected = i),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      margin: const EdgeInsets.only(right: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: sel ? _textPrimary : _surfaceStrong,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(_icons[i],
+                              size: 16,
+                              color: sel ? _onPrimary : _textSecondary),
+                          const SizedBox(width: 6),
+                          Text(_labels[i],
+                              style: GoogleFonts.montserrat(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: sel ? _onPrimary : _textSecondary)),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Aperçu du widget
+            Expanded(
+              child: SingleChildScrollView(
+                controller: scroll,
+                child: Column(
+                  children: [
+                    _WidgetMockup(type: _selected),
+                    const SizedBox(height: 20),
+                    // Instructions d'ajout
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: _surfaceStrong,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: _border),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Comment ajouter ce widget',
+                              style: GoogleFonts.montserrat(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: _textPrimary)),
+                          const SizedBox(height: 8),
+                          _step('1', 'Appuie longuement sur l\'écran d\'accueil iOS.'),
+                          _step('2', 'Appuie sur le bouton « + » en haut à gauche.'),
+                          _step('3', 'Recherche « Shortist » dans la liste.'),
+                          _step('4', 'Choisis la taille souhaitée puis appuie sur « Ajouter le widget ».'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _step(String num, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 22,
+            height: 22,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+                color: _textPrimary, shape: BoxShape.circle),
+            child: Text(num,
+                style: GoogleFonts.montserrat(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: _onPrimary)),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(text,
+                style: GoogleFonts.montserrat(
+                    fontSize: 13, color: _textPrimary, height: 1.4)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Aperçu stylisé d'un widget (simule un widget iOS 2×2 avec les vraies données).
+class _WidgetMockup extends StatelessWidget {
+  final int type; // 0=To-Do, 1=Notes, 2=À lire, 3=Carnet
+  const _WidgetMockup({required this.type});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      constraints: const BoxConstraints(minHeight: 180),
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: _border, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+              color: _textPrimary.withValues(alpha: 0.08),
+              blurRadius: 20,
+              offset: const Offset(0, 6)),
+        ],
+      ),
+      padding: const EdgeInsets.all(18),
+      child: _buildContent(),
+    );
+  }
+
+  Widget _buildContent() {
+    switch (type) {
+      case 0:
+        return _TodoPreview();
+      case 1:
+        return _NotesPreview();
+      case 2:
+        return _ReadingPreview();
+      default:
+        return _CarnetPreview();
+    }
+  }
+}
+
+class _TodoPreview extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final items = store.todos.where((t) => !t.done).take(5).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          const Icon(Icons.checklist, size: 16),
+          const SizedBox(width: 6),
+          Text('To-Do',
+              style: GoogleFonts.montserrat(
+                  fontSize: 14, fontWeight: FontWeight.w700,
+                  color: _textPrimary)),
+        ]),
+        const Divider(height: 12),
+        if (items.isEmpty)
+          Text('Aucune tâche à faire',
+              style: GoogleFonts.montserrat(
+                  fontSize: 12, color: _textFaint))
+        else
+          ...items.map((t) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(children: [
+                  Icon(Icons.radio_button_unchecked,
+                      size: 14, color: _textSecondary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(t.text,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.montserrat(
+                            fontSize: 13, color: _textPrimary)),
+                  ),
+                ]),
+              )),
+      ],
+    );
+  }
+}
+
+class _NotesPreview extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final items = store.notes.take(5).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          const Icon(Icons.mic_none, size: 16),
+          const SizedBox(width: 6),
+          Text('Notes',
+              style: GoogleFonts.montserrat(
+                  fontSize: 14, fontWeight: FontWeight.w700,
+                  color: _textPrimary)),
+        ]),
+        const Divider(height: 12),
+        if (items.isEmpty)
+          Text('Aucune note rapide',
+              style: GoogleFonts.montserrat(
+                  fontSize: 12, color: _textFaint))
+        else
+          ...items.map((n) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(n.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.montserrat(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: _textPrimary)),
+                    if (n.body.isNotEmpty)
+                      Text(n.body,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.montserrat(
+                              fontSize: 11, color: _textSecondary)),
+                  ],
+                ),
+              )),
+      ],
+    );
+  }
+}
+
+class _ReadingPreview extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final items =
+        store.reading.where((r) => !r.done).take(5).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          const Icon(Icons.bookmark_border, size: 16),
+          const SizedBox(width: 6),
+          Text('À lire',
+              style: GoogleFonts.montserrat(
+                  fontSize: 14, fontWeight: FontWeight.w700,
+                  color: _textPrimary)),
+        ]),
+        const Divider(height: 12),
+        if (items.isEmpty)
+          Text('Aucun élément à lire',
+              style: GoogleFonts.montserrat(
+                  fontSize: 12, color: _textFaint))
+        else
+          ...items.map((r) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(children: [
+                  Icon(Icons.bookmark_border,
+                      size: 14, color: _textSecondary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                        r.text.isEmpty ? '(image)' : r.text,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.montserrat(
+                            fontSize: 13, color: _textPrimary)),
+                  ),
+                ]),
+              )),
+      ],
+    );
+  }
+}
+
+class _CarnetPreview extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final items = store.carnet.take(5).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          const Icon(Icons.menu_book_outlined, size: 16),
+          const SizedBox(width: 6),
+          Text('Carnet',
+              style: GoogleFonts.montserrat(
+                  fontSize: 14, fontWeight: FontWeight.w700,
+                  color: _textPrimary)),
+        ]),
+        const Divider(height: 12),
+        if (items.isEmpty)
+          Text('Carnet vide',
+              style: GoogleFonts.montserrat(
+                  fontSize: 12, color: _textFaint))
+        else
+          ...items.map((f) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(f.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.montserrat(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: _textPrimary)),
+                    if (f.note.isNotEmpty)
+                      Text(f.note,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.montserrat(
+                              fontSize: 11, color: _textSecondary)),
+                  ],
+                ),
+              )),
+      ],
     );
   }
 }

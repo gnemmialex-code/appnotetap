@@ -5,7 +5,9 @@
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>TapBack Note utilise vos photos pour illustrer vos fiches du Carnet.</string>
+	<string>Shortist utilise vos photos pour illustrer vos fiches et éléments À lire.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Shortist utilise l'appareil photo pour prendre une photo à associer à un élément.</string>
 	<!-- Accès au Calendrier (section Agenda) -->
 	<key>NSCalendarsUsageDescription</key>
 	<string>Shortist synchronise l'onglet Agenda avec votre Calendrier : afficher, ajouter, modifier et supprimer vos événements, dans le calendrier de votre choix (iCloud, Google, Outlook…).</string>

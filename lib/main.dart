@@ -212,8 +212,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // Vérifie le flag caméra au lancement (au cas où l'intent a ouvert l'app).
-    WidgetsBinding.instance.addPostFrameCallback((_) => _checkCameraFlag());
+    // Au lancement : si le panneau Tap Back a demandé d'ajouter une image.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkPendingReadingIntent());
   }
 
   @override
@@ -230,39 +230,31 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       store.load();
       calendarSync.refresh();
-      _checkCameraFlag();
+      _checkPendingReadingIntent();
     }
   }
 
-  /// Si l'intent "Appareil photo" a ouvert l'app, navigue vers À lire
-  /// et ouvre directement le picker caméra.
-  Future<void> _checkCameraFlag() async {
+  /// Si le panneau Tap Back « À lire » a demandé d'ajouter une image
+  /// (Photo / Galerie / Fichiers), il a ouvert l'app : on va sur l'onglet
+  /// À lire, on ouvre le formulaire pré-rempli avec le texte déjà saisi et
+  /// on déclenche directement le bon sélecteur. L'app gère toute la prise
+  /// d'image (le snippet iOS ne le faisait pas de façon fiable).
+  Future<void> _checkPendingReadingIntent() async {
     try {
-      final pending = await _ch.invokeMethod<bool>('consumeCameraForReading');
-      if (pending != true || !mounted) return;
+      final res = await _ch.invokeMethod<Map>('consumeReadingDraft');
+      final source = res?['source'] as String?;
+      if (source == null || !mounted) return;
+      final text = (res?['text'] as String?) ?? '';
       // Aller sur l'onglet Capture → À lire (index 2).
       setState(() {
         _tab = 0;
         _captureSub = 2;
       });
-      // Ouvre le picker caméra après le rendu.
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        final b64 = await _pickImageSheet(context, forceCamera: true);
-        if (b64 == null || !mounted) return;
-        _addReadingFromCamera(b64);
+        showReadingForm(context, initialText: text, autoSource: source);
       });
     } catch (_) {}
-  }
-
-  void _addReadingFromCamera(String b64) {
-    final item = ReadItem(
-      id: _uid(),
-      createdAt: DateTime.now(),
-      text: '',
-      imageB64: b64,
-    );
-    store.addReading(item);
   }
 
   @override
@@ -1028,64 +1020,7 @@ class ReadingScreen extends StatelessWidget {
   final bool embedded;
   const ReadingScreen({super.key, this.embedded = false});
 
-  void _addReadingItem(BuildContext context) {
-    final text = TextEditingController();
-    DateTime? remindAt;
-    String? imageB64;
-    _showSheet(context, 'Ajouter à lire', (setSheet) {
-      return [
-        _sheetField(text, 'Texte ou URL…', maxLines: 3),
-        const SizedBox(height: 8),
-        _DateTimeRow(
-          when: remindAt,
-          optional: true,
-          onPick: (d) => setSheet(() => remindAt = d),
-        ),
-        const SizedBox(height: 8),
-        Builder(builder: (innerCtx) => PressPop(
-          child: OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(
-              foregroundColor: _textPrimary,
-              side: BorderSide(color: _border),
-              minimumSize: const Size.fromHeight(54),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14)),
-            ),
-            icon: const Icon(Icons.image_outlined, size: 22),
-            label: Text(
-              imageB64 == null ? 'Ajouter une image' : 'Image ajoutée ✓',
-              style: GoogleFonts.montserrat(fontWeight: FontWeight.w600),
-            ),
-            onPressed: () async {
-              final b64 = await _pickImageSheet(innerCtx);
-              if (b64 == null) return;
-              setSheet(() => imageB64 = b64);
-            },
-          ),
-        )),
-        const SizedBox(height: 14),
-        _sheetPrimary('Ajouter', () {
-          if (text.text.trim().isEmpty && imageB64 == null) return;
-          final item = ReadItem(
-            id: _uid(),
-            createdAt: DateTime.now(),
-            text: text.text.trim(),
-            remindAt: remindAt,
-            imageB64: imageB64,
-          );
-          if (remindAt != null) {
-            Notifications.schedule(
-              id: item.notificationId,
-              body: item.text.isEmpty ? 'Élément à lire' : item.text,
-              when: remindAt!,
-            );
-          }
-          store.addReading(item);
-          Navigator.of(context).pop();
-        }),
-      ];
-    });
-  }
+  void _addReadingItem(BuildContext context) => showReadingForm(context);
 
   @override
   Widget build(BuildContext context) {
@@ -2290,6 +2225,116 @@ String _monthShort(int m) {
 /// Affiche une action sheet iOS pour choisir la source d'une image,
 /// puis retourne le contenu encodé en base64 (ou null si annulé).
 /// [forceCamera] : passe directement à l'appareil photo sans action sheet.
+/// Ouvre le formulaire « Ajouter à lire ». Utilisé par le bouton « + » de
+/// l'onglet À lire ET par le panneau Tap Back (qui passe le texte déjà saisi
+/// via [initialText] et la source d'image à ouvrir automatiquement via
+/// [autoSource] = 'camera' | 'gallery' | 'files').
+void showReadingForm(BuildContext context,
+    {String initialText = '', String? autoSource}) {
+  final text = TextEditingController(text: initialText);
+  DateTime? remindAt;
+  String? imageB64;
+  var autoTriggered = false;
+  _showSheet(context, 'Ajouter à lire', (setSheet) {
+    // Au premier affichage, ouvre directement le sélecteur demandé depuis
+    // le panneau Tap Back (appareil photo / galerie / fichiers).
+    if (autoSource != null && !autoTriggered) {
+      autoTriggered = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        final b64 = await _pickImageForSource(context, autoSource);
+        if (b64 != null) setSheet(() => imageB64 = b64);
+      });
+    }
+    return [
+      _sheetField(text, 'Texte ou URL…', maxLines: 3),
+      const SizedBox(height: 8),
+      _DateTimeRow(
+        when: remindAt,
+        optional: true,
+        onPick: (d) => setSheet(() => remindAt = d),
+      ),
+      const SizedBox(height: 8),
+      Builder(builder: (innerCtx) => PressPop(
+        child: OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: _textPrimary,
+            side: BorderSide(color: _border),
+            minimumSize: const Size.fromHeight(54),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14)),
+          ),
+          icon: const Icon(Icons.image_outlined, size: 22),
+          label: Text(
+            imageB64 == null ? 'Ajouter une image' : 'Image ajoutée ✓',
+            style: GoogleFonts.montserrat(fontWeight: FontWeight.w600),
+          ),
+          onPressed: () async {
+            final b64 = await _pickImageSheet(innerCtx);
+            if (b64 == null) return;
+            setSheet(() => imageB64 = b64);
+          },
+        ),
+      )),
+      const SizedBox(height: 14),
+      _sheetPrimary('Enregistrer', () {
+        if (text.text.trim().isEmpty && imageB64 == null) return;
+        final item = ReadItem(
+          id: _uid(),
+          createdAt: DateTime.now(),
+          text: text.text.trim(),
+          remindAt: remindAt,
+          imageB64: imageB64,
+        );
+        if (remindAt != null) {
+          Notifications.schedule(
+            id: item.notificationId,
+            body: item.text.isEmpty ? 'Élément à lire' : item.text,
+            when: remindAt!,
+          );
+        }
+        store.addReading(item);
+        Navigator.of(context).pop();
+      }),
+    ];
+  });
+}
+
+/// Effectue la sélection d'image pour une source donnée, sans aucun menu :
+/// 'camera' → appareil photo, 'gallery' → Photos, 'files' → app Fichiers.
+/// Renvoie l'image encodée en base64, ou null si annulé/erreur.
+Future<String?> _pickImageForSource(BuildContext context, String source) async {
+  if (!context.mounted) return null;
+  try {
+    if (source == 'files') {
+      // Ouvre l'app Fichiers iOS via file_picker.
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+      );
+      if (result == null || result.files.isEmpty) return null;
+      final f = result.files.first;
+      final bytes =
+          f.bytes ?? (f.path != null ? await File(f.path!).readAsBytes() : null);
+      if (bytes == null) return null;
+      return base64Encode(bytes);
+    } else {
+      // 'camera' → appareil photo, sinon galerie Photos.
+      final imageSource =
+          source == 'camera' ? ImageSource.camera : ImageSource.gallery;
+      final picked = await ImagePicker().pickImage(
+        source: imageSource,
+        maxWidth: 1280,
+        imageQuality: 80,
+      );
+      if (picked == null) return null;
+      final bytes = await picked.readAsBytes();
+      return base64Encode(bytes);
+    }
+  } catch (_) {
+    return null;
+  }
+}
+
 Future<String?> _pickImageSheet(BuildContext context,
     {bool forceCamera = false}) async {
   String? source;
@@ -2309,7 +2354,7 @@ Future<String?> _pickImageSheet(BuildContext context,
           ),
           CupertinoActionSheetAction(
             onPressed: () => Navigator.of(ctx).pop('gallery'),
-            child: Text('🖼️  Photos',
+            child: Text('🖼️  Galerie',
                 style: GoogleFonts.montserrat()),
           ),
           CupertinoActionSheetAction(
@@ -2328,35 +2373,7 @@ Future<String?> _pickImageSheet(BuildContext context,
 
   if (source == null) return null;
   if (!context.mounted) return null;
-
-  try {
-    if (source == 'files') {
-      // Ouvre l'app Fichiers iOS via file_picker.
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.image,
-        allowMultiple: false,
-      );
-      if (result == null || result.files.isEmpty) return null;
-      final f = result.files.first;
-      final bytes =
-          f.bytes ?? (f.path != null ? await File(f.path!).readAsBytes() : null);
-      if (bytes == null) return null;
-      return base64Encode(bytes);
-    } else {
-      final imageSource =
-          source == 'camera' ? ImageSource.camera : ImageSource.gallery;
-      final picked = await ImagePicker().pickImage(
-        source: imageSource,
-        maxWidth: 1280,
-        imageQuality: 80,
-      );
-      if (picked == null) return null;
-      final bytes = await picked.readAsBytes();
-      return base64Encode(bytes);
-    }
-  } catch (_) {
-    return null;
-  }
+  return _pickImageForSource(context, source);
 }
 
 void _showSheet(BuildContext context, String title,

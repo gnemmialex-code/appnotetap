@@ -18,7 +18,6 @@
 
 import AppIntents
 import SwiftUI
-import UniformTypeIdentifiers
 
 // MARK: - Pont de stockage vers shared_preferences (lib/store.dart)
 
@@ -169,53 +168,31 @@ enum ShortistNativeStore {
   }
 }
 
-// MARK: - Brouillon du formulaire « À lire » (texte + image)
+// MARK: - Brouillon du formulaire « À lire » (texte)
 
-/// UserDefaults où l'on stocke le brouillon en cours d'édition.
-/// On privilégie l'App Group, partagé entre l'app principale ET le processus
-/// qui rend le snippet système : le sélecteur Galerie/Fichiers (IntentFile)
-/// s'exécute parfois hors du processus de rendu, et l'image écrite dans
-/// `UserDefaults.standard` n'était alors pas relue → elle « disparaissait »
-/// au retour en arrière et n'était pas enregistrée. Repli sur `.standard`
-/// si la capacité App Group n'est pas (encore) activée : comportement
-/// jamais pire qu'avant.
-let qpDraftDefaults: UserDefaults =
-  UserDefaults(suiteName: "group.com.gnemmialex.tapbacknote") ?? .standard
+/// Le snippet ne gère QUE le texte. L'ajout d'image (appareil photo / galerie
+/// Photos / fichiers) est délégué à l'app Flutter, qui le fait de façon fiable
+/// (le snippet iOS ne savait pas ouvrir la galerie Photos via IntentFile et ne
+/// partageait pas l'image correctement). On écrit dans `UserDefaults.standard`,
+/// lu par l'app (shared_preferences / AppDelegate) — le même canal que celui,
+/// déjà fonctionnel, qui déclenchait l'appareil photo.
+let qpDraftDefaults = UserDefaults.standard
 
-private let qpDraftTextKey  = "qp_reading_draft"
-private let qpDraftImageKey = "qp_reading_image_data"
+private let qpDraftTextKey = "qp_reading_draft"
+/// Source d'image demandée par le panneau, consommée par l'app au lancement :
+/// "camera" | "gallery" | "files".
+private let qpPendingSourceKey = "qp_reading_pending_source"
 
-/// Vide le brouillon (texte + image) et force l'écriture sur disque.
+/// Vide le brouillon (texte) et force l'écriture sur disque.
 private func clearReadingDraft() {
   qpDraftDefaults.removeObject(forKey: qpDraftTextKey)
-  qpDraftDefaults.removeObject(forKey: qpDraftImageKey)
   qpDraftDefaults.synchronize()
 }
 
-// MARK: - Utilitaires image partagés entre les intents
-
-/// Compresse l'image (max 800 pt, JPEG 75 %) avant de la stocker en UserDefaults.
-private func compressImageData(_ raw: Data) -> Data {
-  guard let ui = UIImage(data: raw) else { return raw }
-  let maxDim: CGFloat = 800
-  let scale = min(maxDim / max(ui.size.width, 1), maxDim / max(ui.size.height, 1), 1)
-  let size = CGSize(width: ui.size.width * scale, height: ui.size.height * scale)
-  let renderer = UIGraphicsImageRenderer(size: size)
-  let resized = renderer.image { _ in ui.draw(in: CGRect(origin: .zero, size: size)) }
-  return resized.jpegData(compressionQuality: 0.75) ?? raw
-}
-
-/// Lit les données d'un IntentFile en essayant d'abord `data` puis `fileURL`.
-/// Sauvegarde le résultat compressé sous la clé `qp_reading_image_data`.
-private func saveIntentImageToDefaults(_ imageFile: IntentFile) {
-  var rawData: Data?
-  if let d = try? imageFile.data, !d.isEmpty {
-    rawData = d
-  } else if let url = imageFile.fileURL {
-    rawData = try? Data(contentsOf: url)
-  }
-  guard let raw = rawData, !raw.isEmpty else { return }
-  qpDraftDefaults.set(compressImageData(raw), forKey: qpDraftImageKey)
+/// Mémorise la source d'image demandée + ouvre l'app (via openAppWhenRun)
+/// pour que Flutter ouvre le formulaire « À lire » et le bon sélecteur.
+private func requestReadingImage(_ source: String) {
+  qpDraftDefaults.set(source, forKey: qpPendingSourceKey)
   qpDraftDefaults.synchronize()
 }
 
@@ -388,13 +365,11 @@ struct SaveReadingFromFormIntent: SnippetIntent {
   static let title: LocalizedStringResource = "Enregistrer À lire"
 
   func perform() async throws -> some IntentResult & ShowsSnippetView {
-    // Relit l'état le plus récent (l'image a pu être écrite par un autre
-    // processus) avant de construire la fiche.
+    // Enregistrement texte seul depuis le snippet (les images passent par
+    // l'app via les boutons Photo/Galerie/Fichiers).
     qpDraftDefaults.synchronize()
     let text = qpDraftDefaults.string(forKey: qpDraftTextKey) ?? ""
-    let raw = qpDraftDefaults.data(forKey: qpDraftImageKey) ?? Data()
-    let imageB64: String? = raw.isEmpty ? nil : raw.base64EncodedString()
-    ShortistNativeStore.addReading(text: text, imageB64: imageB64)
+    ShortistNativeStore.addReading(text: text, imageB64: nil)
     clearReadingDraft()
     let todos = ShortistNativeStore.quickPanelTodos()
     return .result(view: PanelView(todos: todos))
@@ -443,47 +418,44 @@ struct EnterReadingTextIntent: AppIntent {
   }
 }
 
-// Intent « Photos » : restreint aux images, ouvre PHPicker (Photos app).
-@available(iOS 26.0, *)
-struct AddReadingPhotosImageIntent: AppIntent {
-  static let title: LocalizedStringResource = "Choisir depuis Photos"
-  static let openAppWhenRun: Bool = false
+// Les trois sources d'image ouvrent l'app Flutter (openAppWhenRun = true) :
+// elle ouvre le formulaire « À lire » pré-rempli avec le texte déjà saisi et
+// déclenche directement le bon sélecteur. Le snippet iOS ne savait pas ouvrir
+// la galerie Photos (IntentFile = sélecteur de fichiers) et ne partageait pas
+// l'image de façon fiable — d'où ce routage vers l'app.
 
-  @Parameter(title: "Photo", supportedContentTypes: [UTType.image])
-  var imageFile: IntentFile
-
-  func perform() async throws -> some IntentResult & ShowsSnippetIntent {
-    saveIntentImageToDefaults(imageFile)
-    return .result(snippetIntent: RefreshReadingFormIntent())
-  }
-}
-
-// Intent « Fichiers » : ouvre le sélecteur de documents (app Fichiers).
-@available(iOS 26.0, *)
-struct AddReadingFilesImageIntent: AppIntent {
-  static let title: LocalizedStringResource = "Choisir depuis Fichiers"
-  static let openAppWhenRun: Bool = false
-
-  @Parameter(title: "Fichier image")
-  var imageFile: IntentFile
-
-  func perform() async throws -> some IntentResult & ShowsSnippetIntent {
-    saveIntentImageToDefaults(imageFile)
-    return .result(snippetIntent: RefreshReadingFormIntent())
-  }
-}
-
-// Intent « Appareil photo » : ouvre l'app Flutter pour prendre une photo.
+// Intent « Galerie » : ouvre l'app → galerie Photos.
 @available(iOS 16.0, *)
-struct AddReadingCameraIntent: AppIntent {
-  static let title: LocalizedStringResource = "Prendre une photo"
-  // L'appareil photo nécessite que l'app soit au premier plan.
+struct AddReadingPhotosImageIntent: AppIntent {
+  static let title: LocalizedStringResource = "Ajouter depuis la galerie"
   static let openAppWhenRun: Bool = true
 
   func perform() async throws -> some IntentResult {
-    // Demande à Flutter d'ouvrir l'appareil photo dès son lancement.
-    UserDefaults.standard.set(true, forKey: "qp_open_camera_for_reading")
-    UserDefaults.standard.synchronize()
+    requestReadingImage("gallery")
+    return .result()
+  }
+}
+
+// Intent « Fichiers » : ouvre l'app → sélecteur de fichiers.
+@available(iOS 16.0, *)
+struct AddReadingFilesImageIntent: AppIntent {
+  static let title: LocalizedStringResource = "Ajouter depuis Fichiers"
+  static let openAppWhenRun: Bool = true
+
+  func perform() async throws -> some IntentResult {
+    requestReadingImage("files")
+    return .result()
+  }
+}
+
+// Intent « Appareil photo » : ouvre l'app → appareil photo.
+@available(iOS 16.0, *)
+struct AddReadingCameraIntent: AppIntent {
+  static let title: LocalizedStringResource = "Prendre une photo"
+  static let openAppWhenRun: Bool = true
+
+  func perform() async throws -> some IntentResult {
+    requestReadingImage("camera")
     return .result()
   }
 }
@@ -491,7 +463,6 @@ struct AddReadingCameraIntent: AppIntent {
 @available(iOS 26.0, *)
 struct ReadingFormView: View {
   @AppStorage("qp_reading_draft", store: qpDraftDefaults) private var text = ""
-  @AppStorage("qp_reading_image_data", store: qpDraftDefaults) private var imageData: Data = Data()
 
   @ViewBuilder
   private func imageTileLabel(icon: String, label: String, highlighted: Bool) -> some View {
@@ -536,48 +507,32 @@ struct ReadingFormView: View {
       }
       .buttonStyle(.plain)
 
-      // Trois boutons d'ajout d'image : Photo (appareil photo), Galerie, Fichiers
+      // Pour ajouter une image, on ouvre l'app (gère caméra / galerie /
+      // fichiers de façon fiable) avec le texte déjà saisi.
       HStack(spacing: 6) {
-        // Appareil photo (ouvre l'app Flutter)
+        // Appareil photo
         Button(intent: AddReadingCameraIntent()) {
-          imageTileLabel(
-            icon: "camera",
-            label: "Photo",
-            highlighted: false
-          )
+          imageTileLabel(icon: "camera", label: "Photo", highlighted: false)
         }
         .buttonStyle(.plain)
 
-        // Médiathèque Photos (galerie)
+        // Galerie Photos
         Button(intent: AddReadingPhotosImageIntent()) {
-          imageTileLabel(
-            icon: imageData.isEmpty ? "photo" : "photo.fill",
-            label: "Galerie",
-            highlighted: !imageData.isEmpty
-          )
+          imageTileLabel(icon: "photo", label: "Galerie", highlighted: false)
         }
         .buttonStyle(.plain)
 
         // App Fichiers
         Button(intent: AddReadingFilesImageIntent()) {
-          imageTileLabel(
-            icon: "folder",
-            label: "Fichiers",
-            highlighted: false
-          )
+          imageTileLabel(icon: "folder", label: "Fichiers", highlighted: false)
         }
         .buttonStyle(.plain)
       }
 
-      // Aperçu image si sélectionnée
-      if !imageData.isEmpty, let ui = UIImage(data: imageData) {
-        Image(uiImage: ui)
-          .resizable()
-          .scaledToFill()
-          .frame(maxWidth: .infinity, maxHeight: 80)
-          .clipShape(RoundedRectangle(cornerRadius: 8))
-          .clipped()
-      }
+      Text("Une image ? Ces boutons ouvrent l'app pour la choisir.")
+        .font(.system(size: 10))
+        .foregroundColor(.secondary)
+        .frame(maxWidth: .infinity, alignment: .center)
 
       // Boutons de même taille — style custom identique pour les deux
       HStack(spacing: 8) {

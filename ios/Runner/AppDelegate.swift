@@ -40,12 +40,18 @@ private let kWidgetKeys = ["flutter.tbc_todos", "flutter.tbc_notes", "flutter.tb
     channel.setMethodCallHandler { call, result in
       switch call.method {
 
-      case "consumeCameraForReading":
-        // Retourne true si un intent a demandé d'ouvrir l'appareil photo
-        // pour "À lire", puis efface le flag (consommation unique).
-        let pending = UserDefaults.standard.bool(forKey: "qp_open_camera_for_reading")
-        UserDefaults.standard.removeObject(forKey: "qp_open_camera_for_reading")
-        result(pending)
+      case "consumeReadingDraft":
+        // Le panneau Tap Back « À lire » a demandé d'ajouter une image :
+        // retourne la source choisie ("camera"/"gallery"/"files") + le texte
+        // déjà saisi, puis efface (consommation unique). source == nil → rien.
+        let source = UserDefaults.standard.string(forKey: "qp_reading_pending_source")
+        let text = UserDefaults.standard.string(forKey: "qp_reading_draft") ?? ""
+        UserDefaults.standard.removeObject(forKey: "qp_reading_pending_source")
+        UserDefaults.standard.removeObject(forKey: "qp_reading_draft")
+        UserDefaults.standard.synchronize()
+        var payload: [String: Any] = ["text": text]
+        if let source { payload["source"] = source }
+        result(payload)
 
       case "openAccessibility":
         // Ouvre la page d'accueil des Réglages iOS

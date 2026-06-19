@@ -169,6 +169,29 @@ enum ShortistNativeStore {
   }
 }
 
+// MARK: - Brouillon du formulaire « À lire » (texte + image)
+
+/// UserDefaults où l'on stocke le brouillon en cours d'édition.
+/// On privilégie l'App Group, partagé entre l'app principale ET le processus
+/// qui rend le snippet système : le sélecteur Galerie/Fichiers (IntentFile)
+/// s'exécute parfois hors du processus de rendu, et l'image écrite dans
+/// `UserDefaults.standard` n'était alors pas relue → elle « disparaissait »
+/// au retour en arrière et n'était pas enregistrée. Repli sur `.standard`
+/// si la capacité App Group n'est pas (encore) activée : comportement
+/// jamais pire qu'avant.
+let qpDraftDefaults: UserDefaults =
+  UserDefaults(suiteName: "group.com.gnemmialex.tapbacknote") ?? .standard
+
+private let qpDraftTextKey  = "qp_reading_draft"
+private let qpDraftImageKey = "qp_reading_image_data"
+
+/// Vide le brouillon (texte + image) et force l'écriture sur disque.
+private func clearReadingDraft() {
+  qpDraftDefaults.removeObject(forKey: qpDraftTextKey)
+  qpDraftDefaults.removeObject(forKey: qpDraftImageKey)
+  qpDraftDefaults.synchronize()
+}
+
 // MARK: - Utilitaires image partagés entre les intents
 
 /// Compresse l'image (max 800 pt, JPEG 75 %) avant de la stocker en UserDefaults.
@@ -192,8 +215,8 @@ private func saveIntentImageToDefaults(_ imageFile: IntentFile) {
     rawData = try? Data(contentsOf: url)
   }
   guard let raw = rawData, !raw.isEmpty else { return }
-  UserDefaults.standard.set(compressImageData(raw), forKey: "qp_reading_image_data")
-  UserDefaults.standard.synchronize()
+  qpDraftDefaults.set(compressImageData(raw), forKey: qpDraftImageKey)
+  qpDraftDefaults.synchronize()
 }
 
 // MARK: - Snippet interactif (iOS 26) : la carte flottante système
@@ -355,8 +378,7 @@ struct ShowReadingFormIntent: SnippetIntent {
 
   func perform() async throws -> some IntentResult & ShowsSnippetView {
     // Efface le brouillon précédent avant d'afficher le formulaire.
-    UserDefaults.standard.removeObject(forKey: "qp_reading_draft")
-    UserDefaults.standard.removeObject(forKey: "qp_reading_image_data")
+    clearReadingDraft()
     return .result(view: ReadingFormView())
   }
 }
@@ -366,12 +388,14 @@ struct SaveReadingFromFormIntent: SnippetIntent {
   static let title: LocalizedStringResource = "Enregistrer À lire"
 
   func perform() async throws -> some IntentResult & ShowsSnippetView {
-    let text = UserDefaults.standard.string(forKey: "qp_reading_draft") ?? ""
-    let raw = UserDefaults.standard.data(forKey: "qp_reading_image_data") ?? Data()
+    // Relit l'état le plus récent (l'image a pu être écrite par un autre
+    // processus) avant de construire la fiche.
+    qpDraftDefaults.synchronize()
+    let text = qpDraftDefaults.string(forKey: qpDraftTextKey) ?? ""
+    let raw = qpDraftDefaults.data(forKey: qpDraftImageKey) ?? Data()
     let imageB64: String? = raw.isEmpty ? nil : raw.base64EncodedString()
     ShortistNativeStore.addReading(text: text, imageB64: imageB64)
-    UserDefaults.standard.removeObject(forKey: "qp_reading_draft")
-    UserDefaults.standard.removeObject(forKey: "qp_reading_image_data")
+    clearReadingDraft()
     let todos = ShortistNativeStore.quickPanelTodos()
     return .result(view: PanelView(todos: todos))
   }
@@ -382,8 +406,7 @@ struct CancelReadingFormIntent: SnippetIntent {
   static let title: LocalizedStringResource = "Annuler"
 
   func perform() async throws -> some IntentResult & ShowsSnippetView {
-    UserDefaults.standard.removeObject(forKey: "qp_reading_draft")
-    UserDefaults.standard.removeObject(forKey: "qp_reading_image_data")
+    clearReadingDraft()
     let todos = ShortistNativeStore.quickPanelTodos()
     return .result(view: PanelView(todos: todos))
   }
@@ -414,7 +437,8 @@ struct EnterReadingTextIntent: AppIntent {
   var text: String
 
   func perform() async throws -> some IntentResult & ShowsSnippetIntent {
-    UserDefaults.standard.set(text, forKey: "qp_reading_draft")
+    qpDraftDefaults.set(text, forKey: qpDraftTextKey)
+    qpDraftDefaults.synchronize()
     return .result(snippetIntent: RefreshReadingFormIntent())
   }
 }
@@ -466,8 +490,8 @@ struct AddReadingCameraIntent: AppIntent {
 
 @available(iOS 26.0, *)
 struct ReadingFormView: View {
-  @AppStorage("qp_reading_draft") private var text = ""
-  @AppStorage("qp_reading_image_data") private var imageData: Data = Data()
+  @AppStorage("qp_reading_draft", store: qpDraftDefaults) private var text = ""
+  @AppStorage("qp_reading_image_data", store: qpDraftDefaults) private var imageData: Data = Data()
 
   @ViewBuilder
   private func imageTileLabel(icon: String, label: String, highlighted: Bool) -> some View {
@@ -512,7 +536,7 @@ struct ReadingFormView: View {
       }
       .buttonStyle(.plain)
 
-      // Trois boutons d'ajout d'image : Photo, Photos, Fichiers
+      // Trois boutons d'ajout d'image : Photo (appareil photo), Galerie, Fichiers
       HStack(spacing: 6) {
         // Appareil photo (ouvre l'app Flutter)
         Button(intent: AddReadingCameraIntent()) {
@@ -524,11 +548,11 @@ struct ReadingFormView: View {
         }
         .buttonStyle(.plain)
 
-        // Médiathèque Photos
+        // Médiathèque Photos (galerie)
         Button(intent: AddReadingPhotosImageIntent()) {
           imageTileLabel(
             icon: imageData.isEmpty ? "photo" : "photo.fill",
-            label: "Photos",
+            label: "Galerie",
             highlighted: !imageData.isEmpty
           )
         }
